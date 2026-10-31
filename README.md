@@ -1,123 +1,124 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/●-pipsqueak-16161A?style=for-the-badge&labelColor=FF4D1A" alt="pipsqueak" height="38" />
+<img src="public/favicon.svg" alt="" width="56" height="56" />
 
-# Describe an app. Get the screens.
+# Pipsqueak
 
-**Pipsqueak turns one sentence into editable mobile app screens.** Tweak them, preview them on devices, click through a prototype, then export to HTML, PNG, design tokens or a prompt for your AI coder.
+**Design anything with a sentence.**
 
-<br />
-
-![React](https://img.shields.io/badge/React-18.3-61DAFB?style=flat-square&logo=react&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-6-646CFF?style=flat-square&logo=vite&logoColor=white)
-![Framer Motion](https://img.shields.io/badge/Framer_Motion-12-0055FF?style=flat-square&logo=framer&logoColor=white)
-![Runs offline](https://img.shields.io/badge/AI-simulated,_on--device-FF4D1A?style=flat-square)
-![No backend](https://img.shields.io/badge/backend-none-16161A?style=flat-square)
+Pipsqueak works out what you're making, offers three distinct art directions, designs every screen on a live canvas, and hands you a React project you can ship.
 
 <br />
 
-<img src="docs/screenshots/home.png" alt="Pipsqueak home screen" width="900" />
+<img src="docs/screenshots/landing.png" alt="The Pipsqueak landing page" width="900" />
 
 </div>
 
 <br />
 
-## ✨ What it does
+## What it does
 
-Type something like *“Split UPI bills with roommates”* and Pipsqueak:
+Describe a mobile app, a web app or a website in one sentence. You can attach a sketch, a screenshot or a moodboard too. Pipsqueak then:
 
-1. **Reads your idea.** It detects the kind of app (finance, food, fitness, travel, and more).
-2. **Names it.** For example, *Paise*.
-3. **Lays out 3–6 screens:** Welcome, Home, Explore, Detail, Insights and Profile.
-4. **Styles it** with a palette, a font and a corner radius that fit the vibe.
-5. **Drops you into the Studio**, where every block is editable.
+1. **Understands the product.** It names it, decides who it's for and what the main screen is built around, and maps the screens. Each screen gets its own composition, so no two share a layout.
+2. **Offers three directions.** Each is a complete design system: type pairing, color strategy (with contrast checked and repaired), shape, icons, imagery and motion. They come from 18 art directions, such as Editorial, Swiss Grid, Quiet Luxury, Raw Brutalism, Risograph and Instrument, and are previewed side by side on your own main screen.
+3. **Designs every screen on a canvas.** Once you choose a direction, the rest of the product is designed in parallel in that system. The screens share navigation, link to each other, and use an image kit painted in the direction's style.
+4. **Lets you refine anything.** Select an element and ask Pip, the built-in design partner, to change it, or edit its properties by hand. Pip can also make changes across the whole app.
 
 <div align="center">
-<img src="docs/screenshots/generating.png" alt="Generating screens" width="820" />
-</div>
-
-> [!NOTE]
-> The “AI” is **simulated and runs entirely in your browser**. No API keys, no network calls, nothing sent anywhere. Your projects are saved in `localStorage`.
-
-<br />
-
-## 🎨 The Studio
-
-<div align="center">
-<img src="docs/screenshots/studio.png" alt="Pipsqueak Studio" width="900" />
+<img src="docs/screenshots/design-directions.png" alt="Three art directions side by side" width="900" />
+<br /><br />
+<img src="docs/screenshots/design-canvas.png" alt="Every screen on the canvas" width="900" />
 </div>
 
 <br />
+
+## The studio
 
 | | |
 |---|---|
-| 🧱 **Block editor** | Click any block on the phone to edit its text, icons and values. Add from 12 block types: hero card, card carousel, list, stat row, bar chart, progress ring, search bar, filter chips, big button, form, toggles and profile. |
-| 🗂️ **Screens panel** | Drag to reorder, duplicate, shuffle a layout, regenerate content, or add new screens. |
-| 🖌️ **Style** | 8 palettes (Candy, Matcha, Blueberry, Sunset, Midnight, Ocean, Cherry, Mono Pop), 4 fonts (Clean, Rounded, Techy, Editorial), a corner-radius slider, density, and light/dark mode. You can also **pull colors from any image**. |
-| 💬 **Ask** | Plain-English edits: *“dark mode”*, *“add a chart”*, *“rounder corners”*, *“use a serif font”*, *“rename to Boba”*, *“surprise me”*. |
-| ✅ **Checks** | WCAG contrast checks on every text/background pair, with one-click fixes, plus previews for protanopia, deuteranopia, tritanopia and grayscale. |
-| 🕰️ **History** | Undo/redo for every edit, plus a version history you can jump back to. |
-| 🔀 **Variations** | Explore alternative styles for a screen side by side. |
-
-<br />
-
-## 📱 Preview everywhere
-
-Switch between **one screen**, **all screens** and **compare devices**: iPhone 15, iPhone SE, Pixel 8 and a tablet. Each has the right size and platform (iOS or Android) chrome.
+| 🗺️ **Infinite canvas** | Every screen at full length, side by side. Scroll or drag to pan, <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + scroll to zoom. Web designs switch between desktop, tablet and phone widths. |
+| 🎯 **Select to edit** | Click any element to edit its text, typeface, size, weight, tracking, color, fill, corners and padding, or ask Pip to change only that element. Double-click text to type on the design. |
+| 🧬 **Living design system** | Change a color, typeface, radius or icon style and every screen follows, with live contrast ratios. Switch to one of the other two directions at any time. |
+| 💬 **Pip** | Ask for changes across the app: “Add a notifications screen”, “Make it darker”. Pip plans the change, then restyles, adds screens and reworks existing ones, and shows a checklist of what it did. |
+| 🔀 **Variations** | Three alternatives of any screen, side by side: refine, explore or reimagine. |
+| 🔍 **Review** | Rendered checks on every screen (contrast, tiny text, tap targets, overflow) plus a critique of craft, hierarchy, consistency, originality and copy, each issue with a fix. |
+| 🕰️ **Versions** | Every change is kept. Compare any version with the current one, restore it, or undo and redo. |
+| ▶️ **Prototype** | Press <kbd>P</kbd> to tap through the product. Tap something that isn't linked yet and Pip offers to design the screen it should open. |
 
 <div align="center">
-<img src="docs/screenshots/devices.png" alt="Compare devices" width="900" />
+<img src="docs/screenshots/design-edit.png" alt="Selecting and editing an element" width="900" />
 </div>
 
 <br />
 
-## ▶️ Clickable prototype
+## Export
 
-Press <kbd>P</kbd> to play the app. Tabs, cards and buttons navigate between screens with native-feeling push transitions. Toggle **Show tappable areas** to see every hotspot.
+- **React + Tailwind project:** a Vite app with every screen as a component, the design system as Tailwind v4 tokens and working navigation. It builds and runs as-is.
+- **Clickable HTML prototype:** one page per screen plus an index.
+- **DESIGN.md:** the design system as tokens and rules, for designers and coding agents.
+- **Tailwind tokens** and any screen's HTML.
+
+## Showcase
+
+The landing page and dashboard feature real designs made by Pipsqueak from a single sentence, stored in [`public/showcase`](public/showcase). Remix any of them into your account from the dashboard.
+
+## Your account
+
+Email and password sign-in, designs saved to your account as you work, and a Settings page for profile, email and password, design defaults, a brand voice Pip applies to every design, daily usage, export and import, signing out everywhere, and deleting your account. Row-level security keeps every user's data private.
 
 <div align="center">
-<img src="docs/screenshots/prototype.png" alt="Prototype player" width="900" />
+<img src="docs/screenshots/dashboard.png" alt="The dashboard" width="900" />
 </div>
 
 <br />
 
-## 📦 Export
+## How it works
 
-<table>
-<tr>
-<td width="55%">
-<img src="docs/screenshots/export.png" alt="Export dialog" />
-</td>
-<td>
+```
+Browser ──(session token)──▶ Supabase Edge Function "ai" ──▶ model API
+   ▲                              │  verifies the user
+   │   streamed screens (SSE)     │  enforces the daily credit quota
+   └──────────────────────────────┘  logs every run, retries on capacity errors
+```
 
-- **Static screens (HTML):** every screen side by side in one file
-- **Clickable prototype (HTML):** a standalone file you can share
-- **Design tokens (CSS):** colors, font, radius and spacing as variables
-- **Layers (JSON):** a Figma-style layer tree with tokens
-- **Prompt for an AI coder:** tuned for Claude, Codex or v0
-- **Screen images:** 2× PNGs, zipped
-- **App Store screenshots:** headline, background and device frame
+- **Staged, not one-shot.** The engine in `src/design/` runs separate stages for understanding, design systems, screens, edits, plans and critique. Each stage has its own prompt in `supabase/functions/ai/design.ts`.
+- **Guarantees that don't depend on the model.** Text and on-color contrast are repaired with the hue kept. Off-system colors are mapped back onto tokens. Invalid size classes and text under 11px are fixed. Every screen shares one navigation.
+- **Screens are HTML and Tailwind CSS v4**, styled only through design tokens, rendered in sandboxed iframes. A token change restyles every screen live.
+- **The model key never reaches the browser.** It's a Supabase secret used only by the Edge Function.
+- **Quotas.** Each account gets 150 credits a day. Images cost 2 and every other step 1. Failures are free. A complete design with its image kit uses about 20.
 
-</td>
-</tr>
-</table>
+## Quick start
 
-### App Store shot maker
-
-Pick a headline, subtitle, background and layout (single, small or a tilted pair), then download one PNG or all of them as a zip.
-
-<div align="center">
-<img src="docs/screenshots/store-shots.png" alt="App Store screenshot maker" width="900" />
-</div>
-
-<br />
-
-## 🚀 Quick start
+You need **Node 18+** and a **[Supabase](https://supabase.com)** project.
 
 ```bash
 git clone https://github.com/KoushikNavuluri/pipsqueak.git
 cd pipsqueak
 npm install
+```
+
+**1. Set up Supabase** with the [Supabase CLI](https://supabase.com/docs/guides/cli):
+
+```bash
+supabase login
+supabase link --project-ref <your-project-ref>
+supabase db push        # tables, row-level security, storage, run log
+supabase config push    # auth settings from supabase/config.toml
+```
+
+**2. Deploy the design engine.** It needs a Vertex AI express-mode API key, stored as a secret:
+
+```bash
+supabase secrets set GEMINI_API_KEY=<your-key> AI_DAILY_LIMIT=150
+supabase functions deploy ai --use-api --no-verify-jwt
+```
+
+**3. Add your keys.** Copy `.env.example` to `.env.local` and fill in your project URL and publishable key (Supabase dashboard → Settings → API).
+
+**4. Run it:**
+
+```bash
 npm run dev
 ```
 
@@ -125,72 +126,50 @@ Then open **http://localhost:5173**.
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Start the dev server with hot reload |
-| `npm run build` | Build a production bundle into `dist/` |
-| `npm run preview` | Serve the production build locally |
+| `npm run dev` | Start the dev server |
+| `npm run build` | Build for production into `dist/` |
+| `npm run preview` | Serve the production build |
+| `npm run catalog` | Regenerate the Edge Function's catalog after editing directions, patterns or typefaces |
 
-<br />
-
-## ⌨️ Keyboard shortcuts
-
-| Action | Keys |
-|---|---|
-| Command palette | <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>K</kbd> |
-| Generate (home page) | <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>↵</kbd> |
-| Play clickable prototype | <kbd>P</kbd> |
-| Undo / redo | <kbd>⌘</kbd> + <kbd>Z</kbd> / <kbd>⇧</kbd> + <kbd>⌘</kbd> + <kbd>Z</kbd> |
-| Previous / next screen | <kbd>←</kbd> <kbd>→</kbd> |
-| Delete selected block | <kbd>Delete</kbd> |
-| Deselect | <kbd>Esc</kbd> |
-
-<br />
-
-## 🧭 Project structure
+## Project structure
 
 ```
 src/
-├── main.jsx            # Entry point
-├── App.jsx             # Shell: view transitions, dialogs, error boundary
-├── store.jsx           # State, reducer, undo/redo history, localStorage persistence
-├── data.js             # Palettes, fonts, vibes, app categories, templates, devices
-├── gen.js              # The “simulated AI” that turns a prompt into a project
-├── ai.js               # The Ask assistant: plain-English edit commands
-├── render.jsx          # Renders screens, blocks, status bars and tab bars
-├── play.jsx            # Clickable prototype player
-├── exporters.jsx       # HTML, prototype, tokens, JSON, prompt and PNG exports
-├── dialogs.jsx         # Export, App Store shots, variations, history, shortcuts
-├── palette.jsx         # Command palette
-├── imagecolors.js      # Pulls a palette out of an uploaded image
-├── icons.jsx           # Icon registry (lucide)
-├── ui.jsx              # Buttons, segmented controls, menus, toasts, confetti
-├── index.css           # Compiled styles
-└── screens/
-    ├── Home.jsx        # Prompt box, templates, your projects
-    ├── Generating.jsx  # The step-by-step generation screen
-    └── Studio.jsx      # The editor
+├── main.jsx, App.jsx    # Entry, routes (lazy-loaded), error boundary
+├── brand.jsx            # Mark, wordmark, aura, loaders
+├── ui.jsx               # Buttons, segmented controls, menus, dialogs, toasts
+├── store.jsx            # State, undo and redo, saving to Supabase
+├── session.jsx          # Auth session, profile, route guards
+├── showcase.jsx         # Showcase cards, viewer and remixing
+├── pages/               # Landing, sign in and up, dashboard, settings, 404
+├── studio/              # Creation flow and the canvas studio
+│   ├── CreateFlow.jsx   # Understand → three directions → build
+│   ├── CanvasStudio.jsx # Canvas, screens, prompt bar and panels
+│   ├── useStudio.js     # Build queue, edits, Pip, review, image kit
+│   └── panels/          # Inspector, design system, chat, review, history
+├── design/              # The design engine
+│   ├── engine.js        # Stages: understand, systems, screens, edits, plans, critique, imagery
+│   ├── skills.js        # 18 art directions
+│   ├── patterns.js      # 42 composition patterns
+│   ├── system.js        # Design systems, contrast repair, DESIGN.md
+│   ├── lint.js          # Keeps generated HTML on the tokens
+│   ├── frameDoc.js, bridge.js, htmlTools.js
+│   └── exportDesign.js  # React project, HTML prototype, tokens
+└── ai/                  # Calls to the Edge Function, image attachments
+supabase/
+├── functions/ai/        # The Edge Function: handler, stage prompts, catalog
+└── migrations/          # Tables, row-level security, storage, run log
+public/showcase/         # Showcase designs: images, index and remixable projects
 ```
 
-<br />
+## Built with
 
-## 🛠️ Built with
-
-- **[React 18](https://react.dev)** and **[Vite](https://vitejs.dev)**
-- **[Framer Motion](https://motion.dev)** for transitions, layout animations and drag-to-reorder
-- **[Lucide](https://lucide.dev)** icons
-- **[html-to-image](https://github.com/bubkoo/html-to-image)** for PNG exports, and **[fflate](https://github.com/101arrowz/fflate)** for zipping them
-
-<br />
-
-## 📝 About this repo
-
-Pipsqueak started as a single, self-contained `pipsqueak.html` build (still included in the repo root). This repository rebuilds that file as a regular React project, split into modules, with the same layout, styling, interactions and exports.
-
-The rebuild was checked side by side against the original. Screens matched pixel for pixel, and exported files were byte-identical. The styles in `src/index.css` are the original compiled Tailwind output, which is why there is no Tailwind config.
+[React 18](https://react.dev), [Vite](https://vitejs.dev), [React Router](https://reactrouter.com), [Tailwind CSS](https://tailwindcss.com), [Framer Motion](https://motion.dev), [Lucide](https://lucide.dev), [fflate](https://github.com/101arrowz/fflate) and [Supabase](https://supabase.com). Typeset in Fraunces and Geist.
 
 <br />
 
 <div align="center">
 
-**One sentence in. Screens out.** ✦
+**One sentence in. A designed product out.**
 
 </div>

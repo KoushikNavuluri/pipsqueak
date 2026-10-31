@@ -1,72 +1,34 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-} from "react";
-import { generateProject, uid } from "./gen";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
+import { uid } from "./util";
+import { saveCloud } from "./cloud";
 
-const STORAGE_KEY = "pipsqueak.v2";
+export const DEFAULT_PREFS = {
+  reduce: false,
+  aiQuality: "fast",
+  designPlatform: "mobile",
+};
 
-const seedProjects = () =>
-  [
-    generateProject({
-      prompt: "Food app for biryani and tiffin delivery in Hyderabad",
-      vibe: "sunset",
-      count: 5,
-    }),
-    generateProject({
-      prompt: "Split UPI bills and track your monthly budget",
-      vibe: "midnight",
-      count: 4,
-    }),
-    generateProject({
-      prompt: "Weekend trips planner from Hyderabad",
-      vibe: "matcha",
-      count: 5,
-    }),
-  ].map((e, t) => ({
-    ...e,
-    created: Date.now() - (t + 1) * 86400000 * 2,
-    fav: t === 0,
-  }));
+// Older versions of the app seeded every new account with these sample
+// projects. They aren't the user's work, so they're dropped on load.
+const SEEDED_PROMPTS = new Set([
+  "Food app for biryani and tiffin delivery in Hyderabad",
+  "Split UPI bills and track your monthly budget",
+  "Weekend trips planner from Hyderabad",
+]);
 
-const fresh = () => ({
-  projects: seedProjects(),
-  activeId: null,
-  prefs: {
-    reduce: false,
-    device: "iphone",
-  },
-});
-
-function load() {
-  try {
-    const e = localStorage.getItem(STORAGE_KEY);
-    if (e) {
-      const t = JSON.parse(e);
-      if (t && Array.isArray(t.projects)) {
-        return {
-          ...fresh(),
-          ...t,
-          prefs: {
-            ...fresh().prefs,
-            ...t.prefs,
-          },
-        };
-      }
-    }
-  } catch {}
-  return fresh();
+export function cleanData(data) {
+  return {
+    activeId: data.activeId ?? null,
+    projects: (data.projects || []).filter((p) => !(p.kind !== "canvas" && SEEDED_PROMPTS.has(p.prompt))),
+    prefs: Object.fromEntries(Object.keys(DEFAULT_PREFS).map((k) => [k, data.prefs?.[k] ?? DEFAULT_PREFS[k]])),
+  };
 }
 
-export const initial = () => ({
-  data: load(),
+export const emptyData = () => ({ projects: [], activeId: null, prefs: { ...DEFAULT_PREFS } });
+
+const initial = (data) => ({
+  data,
   view: "home",
-  dialog: null,
   gen: null,
   toasts: [],
   hist: {},
@@ -74,356 +36,194 @@ export const initial = () => ({
   trash: null,
 });
 
-function reducer(e, t) {
-  const D = (r) => ({
-    ...e,
-    data: {
-      ...e.data,
-      ...r,
-    },
-  });
-  switch (t.t) {
+// Conversation and review belong to the project but not to its undo history:
+// undo and redo restore the design and keep these as they are.
+const keepMeta = (snapshot, current) => ({ ...snapshot, chat: current.chat, review: current.review });
+
+function reducer(state, action) {
+  const data = (patch) => ({ ...state, data: { ...state.data, ...patch } });
+  switch (action.t) {
     case "VIEW":
-      return {
-        ...e,
-        view: t.view,
-        dialog: null,
-      };
-    case "DIALOG":
-      return {
-        ...e,
-        dialog: t.dialog,
-      };
+      return { ...state, view: action.view };
     case "GEN_START":
-      return {
-        ...e,
-        gen: t.project,
-        dialog: null,
-      };
+      return { ...state, gen: action.request };
     case "GEN_CANCEL":
-      return {
-        ...e,
-        gen: null,
-      };
+      return { ...state, gen: null };
     case "ADD":
-      return {
-        ...D({
-          projects: [t.project, ...e.data.projects],
-          activeId: t.project.id,
-        }),
-        gen: null,
-        view: "studio",
-        dialog: null,
-      };
+      return { ...data({ projects: [action.project, ...state.data.projects], activeId: action.project.id }), gen: null, view: "studio" };
     case "OPEN":
-      return {
-        ...D({
-          activeId: t.id,
-        }),
-        view: "studio",
-        dialog: null,
-      };
+      return { ...data({ activeId: action.id }), view: "studio" };
     case "TOAST":
-      return {
-        ...e,
-        toasts: [...e.toasts, t.toast].slice(-3),
-      };
+      return { ...state, toasts: [...state.toasts, action.toast].slice(-3) };
     case "DISMISS":
-      return {
-        ...e,
-        toasts: e.toasts.filter((r) => r.id !== t.id),
-      };
+      return { ...state, toasts: state.toasts.filter((t) => t.id !== action.id) };
     case "PREF":
-      return D({
-        prefs: {
-          ...e.data.prefs,
-          ...t.patch,
-        },
-      });
+      return data({ prefs: { ...state.data.prefs, ...action.patch } });
     case "EDIT": {
-      const r = e.data.projects.find((c) => c.id === t.id);
-      if (!r) {
-        return e;
-      }
-      const o = t.fn(r);
-      if (o === r) {
-        return e;
-      }
-      const i = e.data.projects.map((c) => (c.id === t.id ? o : c));
-      if (t.silent) {
-        return D({
-          projects: i,
-        });
-      }
-      const s = e.hist[t.id] || {
-        past: [],
-        future: [],
-      };
-      const l = Date.now();
-      const d =
-        t.key &&
-        e.lastEdit &&
-        e.lastEdit.key === t.key &&
-        l - e.lastEdit.t < 900
-          ? s.past
-          : [...s.past, r].slice(-50);
+      const current = state.data.projects.find((p) => p.id === action.id);
+      if (!current) return state;
+      const next = action.fn(current);
+      if (next === current) return state;
+      const projects = state.data.projects.map((p) => (p.id === action.id ? next : p));
+      if (action.silent) return data({ projects });
+      const h = state.hist[action.id] || { past: [], future: [] };
+      const now = Date.now();
+      // Rapid edits with the same key (typing a name, dragging a slider) undo as one.
+      const merge = action.key && state.lastEdit?.key === action.key && now - state.lastEdit.t < 900;
       return {
-        ...D({
-          projects: i,
-        }),
-        hist: {
-          ...e.hist,
-          [t.id]: {
-            past: d,
-            future: [],
-          },
-        },
-        lastEdit: {
-          key: t.key,
-          t: l,
-        },
+        ...data({ projects }),
+        hist: { ...state.hist, [action.id]: { past: merge ? h.past : [...h.past, current].slice(-50), future: [] } },
+        lastEdit: { key: action.key, t: now },
       };
     }
     case "UNDO": {
-      const r = e.hist[t.id];
-      if (!r || !r.past.length) {
-        return e;
-      }
-      const o = e.data.projects.find((s) => s.id === t.id);
-      const i = r.past[r.past.length - 1];
+      const h = state.hist[action.id];
+      if (!h?.past.length) return state;
+      const current = state.data.projects.find((p) => p.id === action.id);
+      const prev = h.past[h.past.length - 1];
       return {
-        ...D({
-          projects: e.data.projects.map((s) => (s.id === t.id ? i : s)),
-        }),
-        hist: {
-          ...e.hist,
-          [t.id]: {
-            past: r.past.slice(0, -1),
-            future: [o, ...r.future],
-          },
-        },
+        ...data({ projects: state.data.projects.map((p) => (p.id === action.id ? keepMeta(prev, current) : p)) }),
+        hist: { ...state.hist, [action.id]: { past: h.past.slice(0, -1), future: [current, ...h.future] } },
         lastEdit: null,
       };
     }
     case "REDO": {
-      const r = e.hist[t.id];
-      if (!r || !r.future.length) {
-        return e;
-      }
-      const o = e.data.projects.find((s) => s.id === t.id);
-      const i = r.future[0];
+      const h = state.hist[action.id];
+      if (!h?.future.length) return state;
+      const current = state.data.projects.find((p) => p.id === action.id);
+      const next = h.future[0];
       return {
-        ...D({
-          projects: e.data.projects.map((s) => (s.id === t.id ? i : s)),
-        }),
-        hist: {
-          ...e.hist,
-          [t.id]: {
-            past: [...r.past, o],
-            future: r.future.slice(1),
-          },
-        },
+        ...data({ projects: state.data.projects.map((p) => (p.id === action.id ? keepMeta(next, current) : p)) }),
+        hist: { ...state.hist, [action.id]: { past: [...h.past, current], future: h.future.slice(1) } },
         lastEdit: null,
       };
     }
     case "DELETE": {
-      const r = e.data.projects.findIndex((i) => i.id === t.id);
-      if (r < 0) {
-        return e;
-      }
-      const o = e.data.projects[r];
+      const idx = state.data.projects.findIndex((p) => p.id === action.id);
+      if (idx < 0) return state;
+      const wasActive = state.data.activeId === action.id;
       return {
-        ...D({
-          projects: e.data.projects.filter((i) => i.id !== t.id),
-          activeId: e.data.activeId === t.id ? null : e.data.activeId,
-        }),
-        view: e.data.activeId === t.id ? "home" : e.view,
-        trash: {
-          project: o,
-          idx: r,
-        },
+        ...data({ projects: state.data.projects.filter((p) => p.id !== action.id), activeId: wasActive ? null : state.data.activeId }),
+        view: wasActive ? "home" : state.view,
+        trash: { project: state.data.projects[idx], idx },
       };
     }
     case "RESTORE": {
-      if (!e.trash) {
-        return e;
-      }
-      const r = e.data.projects.slice();
-      r.splice(Math.min(e.trash.idx, r.length), 0, e.trash.project);
-      return {
-        ...D({
-          projects: r,
-        }),
-        trash: null,
-      };
+      if (!state.trash) return state;
+      const projects = state.data.projects.slice();
+      projects.splice(Math.min(state.trash.idx, projects.length), 0, state.trash.project);
+      return { ...data({ projects }), trash: null };
     }
-    case "RESET":
-      return {
-        ...initial(),
-        data: fresh(),
-      };
+    case "IMPORT":
+      return data({ projects: [...action.projects, ...state.data.projects] });
     default:
-      return e;
+      return state;
   }
 }
 
 const StoreContext = createContext(null);
 
-export function StoreProvider({ children }) {
-  const [t, a] = useReducer(reducer, undefined, initial);
-  const r = useRef(t);
-  r.current = t;
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(t.data));
-    } catch {}
-  }, [t.data]);
-  const o = useCallback((l, u = {}) => {
-    const d = uid();
-    a({
-      t: "TOAST",
-      toast: {
-        id: d,
-        text: l,
-        action: u.action,
-      },
-    });
-    setTimeout(
-      () =>
-        a({
-          t: "DISMISS",
-          id: d,
-        }),
-      u.ms || 3000,
-    );
+// `cloud.data` is what the user starts with; `cloud.saved` is what Supabase
+// already holds (null when nothing has been saved yet). Changes are written
+// back about half a second after they stop.
+export function StoreProvider({ children, userId, cloud }) {
+  const [state, dispatch] = useReducer(reducer, cloud.data, initial);
+  const latest = useRef(state);
+  latest.current = state;
+  const saved = useRef(cloud.saved);
+  const saving = useRef(null);
+  const failing = useRef(false);
+
+  const toast = useCallback((text, { tone, action, ms } = {}) => {
+    const id = uid();
+    dispatch({ t: "TOAST", toast: { id, text, tone, action } });
+    setTimeout(() => dispatch({ t: "DISMISS", id }), ms || (action ? 5000 : 3200));
   }, []);
-  const i = useMemo(
-    () => ({
-      toast: o,
-      home: () =>
-        a({
-          t: "VIEW",
-          view: "home",
-        }),
-      open: (l) =>
-        a({
-          t: "OPEN",
-          id: l,
-        }),
-      dialog: (l, u) =>
-        a({
-          t: "DIALOG",
-          dialog: l
-            ? {
-                name: l,
-                props: u || {},
-              }
-            : null,
-        }),
-      startGen: (l) =>
-        a({
-          t: "GEN_START",
-          project: l,
-        }),
-      cancelGen: () =>
-        a({
-          t: "GEN_CANCEL",
-        }),
-      add: (l) =>
-        a({
-          t: "ADD",
-          project: l,
-        }),
-      edit: (l, u, d = {}) =>
-        a({
-          t: "EDIT",
-          id: l,
-          fn: u,
-          ...d,
-        }),
-      undo: (l) =>
-        a({
-          t: "UNDO",
-          id: l,
-        }),
-      redo: (l) =>
-        a({
-          t: "REDO",
-          id: l,
-        }),
-      del: (l) => {
-        a({
-          t: "DELETE",
-          id: l,
-        });
-        o("Project deleted", {
-          action: {
-            label: "Undo",
-            run: () =>
-              a({
-                t: "RESTORE",
-              }),
-          },
-          ms: 5000,
-        });
-      },
-      dup: (l) => {
-        const u = r.current.data.projects.find((c) => c.id === l);
-        if (!u) {
-          return;
+
+  const sync = useCallback(() => {
+    if (saving.current) return saving.current;
+    if (latest.current.data === saved.current) return Promise.resolve();
+    const run = async () => {
+      try {
+        while (latest.current.data !== saved.current) {
+          const next = latest.current.data;
+          await saveCloud(userId, saved.current, next);
+          saved.current = next;
         }
-        const d = JSON.parse(JSON.stringify(u));
-        d.id = uid();
-        d.name = u.name + " copy";
-        d.created = Date.now();
-        d.fav = false;
-        a({
-          t: "ADD",
-          project: d,
-        });
-        o("Duplicated");
-      },
-      fav: (l) =>
-        a({
-          t: "EDIT",
-          id: l,
-          silent: true,
-          fn: (u) => ({
-            ...u,
-            fav: !u.fav,
-          }),
-        }),
-      pref: (l) =>
-        a({
-          t: "PREF",
-          patch: l,
-        }),
-      reset: () => {
-        try {
-          localStorage.removeItem(STORAGE_KEY);
-        } catch {}
-        a({
-          t: "RESET",
-        });
-      },
-    }),
-    [o],
-  );
-  const s = useMemo(
+        failing.current = false;
+      } catch (err) {
+        console.error("Saving failed", err);
+        if (!failing.current) {
+          failing.current = true;
+          toast("Couldn't save your changes. Retrying…", { tone: "error", ms: 4000 });
+        }
+        setTimeout(() => sync(), 5000);
+      }
+    };
+    saving.current = run().finally(() => {
+      saving.current = null;
+    });
+    return saving.current;
+  }, [userId, toast]);
+
+  useEffect(() => {
+    const h = setTimeout(sync, 600);
+    return () => clearTimeout(h);
+  }, [state.data, sync]);
+
+  useEffect(() => {
+    const before = (e) => {
+      if (latest.current.data !== saved.current) {
+        sync();
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", before);
+    return () => window.removeEventListener("beforeunload", before);
+  }, [sync]);
+
+  const api = useMemo(
     () => ({
-      s: t,
-      d: a,
-      api: i,
+      toast,
+      home: () => dispatch({ t: "VIEW", view: "home" }),
+      open: (id) => dispatch({ t: "OPEN", id }),
+      startGen: (request) => dispatch({ t: "GEN_START", request }),
+      cancelGen: () => dispatch({ t: "GEN_CANCEL" }),
+      add: (project) => dispatch({ t: "ADD", project }),
+      edit: (id, fn, opts = {}) => dispatch({ t: "EDIT", id, fn, ...opts }),
+      undo: (id) => dispatch({ t: "UNDO", id }),
+      redo: (id) => dispatch({ t: "REDO", id }),
+      del: (id) => {
+        dispatch({ t: "DELETE", id });
+        toast("Design deleted", { action: { label: "Undo", run: () => dispatch({ t: "RESTORE" }) } });
+      },
+      dup: (id) => {
+        const p = latest.current.data.projects.find((x) => x.id === id);
+        if (!p) return;
+        const copy = { ...JSON.parse(JSON.stringify(p)), id: uid(), name: `${p.name} copy`, created: Date.now(), fav: false };
+        dispatch({ t: "ADD", project: copy });
+        toast("Duplicated", { tone: "success" });
+      },
+      fav: (id) => dispatch({ t: "EDIT", id, silent: true, fn: (p) => ({ ...p, fav: !p.fav }) }),
+      pref: (patch) => dispatch({ t: "PREF", patch }),
+      importProjects: (list) => {
+        const now = Date.now();
+        dispatch({ t: "IMPORT", projects: list.map((p, i) => ({ ...p, id: uid(), created: now - i })) });
+      },
+      // Resolves once every pending change has been written.
+      flush: () => sync(),
     }),
-    [t, i],
+    [toast, sync],
   );
-  return <StoreContext.Provider value={s}>{children}</StoreContext.Provider>;
+
+  const value = useMemo(() => ({ s: state, d: dispatch, api }), [state, api]);
+  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 
 export const useStore = () => useContext(StoreContext);
 
-export function useProject(e) {
+export function useProject(id) {
   const { s } = useStore();
-  const a = e ?? s.data.activeId;
-  return s.data.projects.find((r) => r.id === a) || null;
+  const want = id ?? s.data.activeId;
+  return s.data.projects.find((p) => p.id === want) || null;
 }

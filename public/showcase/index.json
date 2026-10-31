@@ -1,0 +1,993 @@
+[
+ {
+  "slug": "monsoon-frequencies",
+  "name": "Susegad Sound",
+  "tagline": "A printed-paper guide to three days of dust, tide, and analog frequency",
+  "prompt": "A zine-style companion app for an independent music festival in Goa: line-ups, stage maps and a personal schedule",
+  "platform": "mobile",
+  "skill": "riso",
+  "skillName": "Risograph",
+  "systemName": "Oceanic Ink and Perforation",
+  "colors": {
+   "bg": "#F5EFEB",
+   "surface": "#EAE0DA",
+   "primary": "#D31F43",
+   "accent": "#1E2B4A",
+   "ink": "#1E2B4A"
+  },
+  "fonts": {
+   "display": "Bricolage Grotesque",
+   "body": "Space Grotesk"
+  },
+  "brief": {
+   "audience": "Vinyl diggers, experimental electronic heads, and coastal drifters seeking off-beat frequencies in Goa.",
+   "heroObject": "The living festival schedule: who is playing, which shore they are on, and the exact position of the tide.",
+   "summary": "An independent festival companion that swaps clinical tech for the raw warmth of a risograph zine. Built for navigating the salt-air stages of Vagator, saving setlists, and keeping time by the sun."
+  },
+  "screens": [
+   {
+    "id": "schedule",
+    "name": "Line-up",
+    "patternName": "Agenda rail",
+    "w": 390,
+    "h": 1575
+   },
+   {
+    "id": "cover",
+    "name": "Zine Cover",
+    "patternName": "Editorial cover",
+    "w": 390,
+    "h": 1117
+   },
+   {
+    "id": "pocket",
+    "name": "My Pocket",
+    "patternName": "Checklist",
+    "w": 390,
+    "h": 1268
+   },
+   {
+    "id": "shoreline",
+    "name": "Map",
+    "patternName": "Map plus sheet",
+    "w": 390,
+    "h": 1426
+   },
+   {
+    "id": "bulletin",
+    "name": "Zine Log",
+    "patternName": "Text-forward thread",
+    "w": 390,
+    "h": 1681
+   }
+  ],
+  "directions": [
+   {
+    "name": "Oceanic Ink and Perforation",
+    "skill": "riso",
+    "skillName": "Risograph",
+    "colors": {
+     "bg": "#F5EFEB",
+     "primary": "#D31F43",
+     "accent": "#1E2B4A",
+     "ink": "#1E2B4A"
+    },
+    "fonts": {
+     "display": "Bricolage Grotesque"
+    },
+    "chosen": true
+   },
+   {
+    "name": "Basalt Tide",
+    "skill": "brutalist",
+    "skillName": "Raw Brutalism",
+    "colors": {
+     "bg": "#0D0D0C",
+     "primary": "#FFFF00",
+     "accent": "#FFFF00",
+     "ink": "#F2F2F0"
+    },
+    "fonts": {
+     "display": "Archivo"
+    },
+    "chosen": false
+   },
+   {
+    "name": "Monsoon Terrace",
+    "skill": "organic",
+    "skillName": "Grounded Natural",
+    "colors": {
+     "bg": "#F5EFEB",
+     "primary": "#AD533D",
+     "accent": "#5C7C63",
+     "ink": "#2B2421"
+    },
+    "fonts": {
+     "display": "Newsreader"
+    },
+    "chosen": false
+   }
+  ],
+  "code": {
+   "file": "LineUp.jsx",
+   "code": "    <main className=\"min-h-screen bg-bg text-ink font-body pb-32 relative overflow-hidden selec…\n      <div className=\"absolute inset-0 pointer-events-none opacity-[0.12] mix-blend-multiply bg…\n      <header className=\"pt-4 px-4 pb-2 border-b-2 border-dashed border-line/40 relative\">\n        <div className=\"flex justify-between items-start mb-4\">\n          <div>\n            <span className=\"font-mono text-xs uppercase tracking-wider text-on-primary bg-prim…\n              DEC 14 – 16 · VAGATOR\n            </span>\n            <div className=\"relative mt-3 select-none\">\n              <span className=\"absolute top-[2px] left-[2px] font-display font-extrabold text-4…\n                SUSEGAD SOUND\n              </span>\n              <h1 className=\"relative font-display font-extrabold text-4xl text-ink leading-non…\n                SUSEGAD SOUND\n              </h1>\n            </div>\n          </div>\n          <div className=\"border-2 border-accent bg-surface-2 p-2 rounded-sm text-right transfo…\n            <div className=\"font-mono text-[11px] uppercase text-muted leading-none\">\n              HIGH TIDE PEAK\n            </div>\n            <div className=\"font-mono font-bold text-xs text-ink mt-0.5\">\n              19:42 · TIDE'S IN\n            </div>\n          </div>\n        </div>\n        <div className=\"bg-primary/10 border-2 border-primary rounded-sm p-3 mb-2 flex items-ce…\n          <div className=\"flex items-center gap-2\">\n            <span className=\"w-2.5 h-2.5 bg-primary rounded-full animate-pulse\" />\n            <span className=\"font-mono text-xs uppercase tracking-wider text-muted\">\n              ON AIR NOW:\n            </span>\n            <span className=\"font-mono text-xs font-bold text-ink truncate max-w-[180px]\">\n              LIFAFA at The Dunes"
+  }
+ },
+ {
+  "slug": "kobo-ceramics",
+  "name": "Kiyomizu",
+  "tagline": "Touch the clay of Kyoto. Learn from third-generation masters.",
+  "prompt": "A booking site for a small ceramics studio in Kyoto that runs wheel-throwing classes for travellers",
+  "platform": "website",
+  "skill": "luxury",
+  "skillName": "Quiet Luxury",
+  "systemName": "Higashiyama Silence",
+  "colors": {
+   "bg": "#FAF9F6",
+   "surface": "#F3F1ED",
+   "primary": "#223E30",
+   "accent": "#3E332E",
+   "ink": "#1A1A1A"
+  },
+  "fonts": {
+   "display": "Cormorant Garamond",
+   "body": "Instrument Sans"
+  },
+  "brief": {
+   "audience": "Cultured global travelers, design-focused couples, and art collectors seeking slow, authentic craft experiences in Japan.",
+   "heroObject": "An exquisite, single-shot film photograph of a raw, wet clay vase rising slowly between the weathered, clay-stained hands of Master Kenjiro Kondo.",
+   "summary": "An intimate online reservation house for an exclusive five-wheel pottery studio in Higashiyama, Kyoto, offering meditative, English-guided ceramic masterclasses for discerning travelers."
+  },
+  "screens": [
+   {
+    "id": "studio-home",
+    "name": "The Studio",
+    "patternName": "Statement plus product slab",
+    "w": 1440,
+    "h": 4200
+   },
+   {
+    "id": "class-experience",
+    "name": "The Class",
+    "patternName": "Split editorial",
+    "w": 1440,
+    "h": 2693
+   },
+   {
+    "id": "reserve-wheel",
+    "name": "Reserve",
+    "patternName": "Sticky buy column",
+    "w": 1440,
+    "h": 1735
+   },
+   {
+    "id": "cart-checkout",
+    "name": "Details",
+    "patternName": "Summary sheet",
+    "w": 1440,
+    "h": 1107
+   }
+  ],
+  "directions": [
+   {
+    "name": "Higashiyama Silence",
+    "skill": "luxury",
+    "skillName": "Quiet Luxury",
+    "colors": {
+     "bg": "#FAF9F6",
+     "primary": "#223E30",
+     "accent": "#3E332E",
+     "ink": "#1A1A1A"
+    },
+    "fonts": {
+     "display": "Cormorant Garamond"
+    },
+    "chosen": true
+   },
+   {
+    "name": "Higashiyama Moss",
+    "skill": "organic",
+    "skillName": "Grounded Natural",
+    "colors": {
+     "bg": "#F5F2EB",
+     "primary": "#2A4736",
+     "accent": "#825C3E",
+     "ink": "#2B2A24"
+    },
+    "fonts": {
+     "display": "Fraunces"
+    },
+    "chosen": false
+   },
+   {
+    "name": "Kyoto Ceramic Archive",
+    "skill": "studio",
+    "skillName": "Studio Portfolio",
+    "colors": {
+     "bg": "#121212",
+     "primary": "#E6E6E6",
+     "accent": "#00E575",
+     "ink": "#F3F3F3"
+    },
+    "fonts": {
+     "display": "Space Grotesk"
+    },
+    "chosen": false
+   }
+  ],
+  "code": {
+   "file": "TheStudio.jsx",
+   "code": "    <main className=\"min-h-screen bg-bg text-ink relative overflow-x-hidden selection:bg-surfac…\n      <header className=\"fixed top-0 inset-x-0 z-50 bg-bg/90 backdrop-blur-md border-b border-l…\n        <div className=\"max-w-[1440px] mx-auto px-6 md:px-12 h-20 flex justify-between items-ce…\n          <a href=\"#\" onClick={() => go(\"studio-home\")} data-nav=\"studio-home\" className=\"font-…\n            Kiyomizu\n          </a>\n          <nav className=\"hidden md:flex items-center space-x-12\">\n            <a href=\"#\" onClick={() => go(\"studio-home\")} data-nav=\"studio-home\" className=\"fon…\n              The Studio\n            </a>\n            <a href=\"#\" onClick={() => go(\"class-experience\")} data-nav=\"class-experience\" clas…\n              The Class\n            </a>\n            <a href=\"#\" onClick={() => go(\"reserve-wheel\")} data-nav=\"reserve-wheel\" className=…\n              Reserve\n            </a>\n          </nav>\n          <div>\n            <a href=\"#\" onClick={() => go(\"reserve-wheel\")} data-nav=\"reserve-wheel\" className=…\n              Reserve a Wheel\n            </a>\n          </div>\n        </div>\n      </header>\n      <section className=\"pt-32 pb-16 md:pt-44 md:pb-28 px-6 md:px-12 max-w-[1440px] mx-auto\">\n        <div className=\"grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-24 items-end\">\n          <div className=\"lg:col-span-7 space-y-6\">\n            <span className=\"font-body text-[11px] uppercase tracking-[0.14em] text-muted block…\n              Higashiyama, Kyoto · Established 1934\n            </span>\n            <h1 className=\"font-display text-[44px] md:text-[68px] lg:text-[76px] text-ink font…\n              Kyoto is not seen;\n              <br />\n              it is shaped by hand."
+  }
+ },
+ {
+  "slug": "coldline",
+  "name": "Kryo",
+  "tagline": "Real-time thermal guard for India’s cold-chain supply",
+  "prompt": "A control room for a cold-chain logistics company tracking refrigerated trucks and their temperatures across India",
+  "platform": "web",
+  "skill": "instrument",
+  "skillName": "Instrument",
+  "systemName": "Kryo Tactical Avionics",
+  "colors": {
+   "bg": "#0D1115",
+   "surface": "#131920",
+   "primary": "#00FF66",
+   "accent": "#FFAE00",
+   "ink": "#E3E7EB"
+  },
+  "fonts": {
+   "display": "Geist Mono",
+   "body": "Instrument Sans"
+  },
+  "brief": {
+   "audience": "Cold-chain operations managers, dispatchers, and quality assurance leads at major pharmaceutical and fresh retail brands.",
+   "heroObject": "The absolute thermal variance across live transit routes",
+   "summary": "An intelligent control room dashboard for refrigerated fleets transporting sensitive pharmaceuticals and fresh produce across extreme Indian climates."
+  },
+  "screens": [
+   {
+    "id": "dashboard-home",
+    "name": "Control Room",
+    "patternName": "Three-pane",
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "id": "fleet-monitor",
+    "name": "Reefer Fleet",
+    "patternName": "Record table",
+    "w": 1440,
+    "h": 900
+   },
+   {
+    "id": "route-insights",
+    "name": "Thermal Analysis",
+    "patternName": "Bars against a target",
+    "w": 1440,
+    "h": 1307
+   },
+   {
+    "id": "shipment-detail",
+    "name": "Cargo Detail",
+    "patternName": "Spec sheet",
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "directions": [
+   {
+    "name": "Kryo Tactical Avionics",
+    "skill": "instrument",
+    "skillName": "Instrument",
+    "colors": {
+     "bg": "#0D1115",
+     "primary": "#00FF66",
+     "accent": "#FFAE00",
+     "ink": "#E3E7EB"
+    },
+    "fonts": {
+     "display": "Geist Mono"
+    },
+    "chosen": true
+   },
+   {
+    "name": "Kryo Rational Grid",
+    "skill": "swiss",
+    "skillName": "Swiss Grid",
+    "colors": {
+     "bg": "#FFFFFF",
+     "primary": "#E30613",
+     "accent": "#000000",
+     "ink": "#000000"
+    },
+    "fonts": {
+     "display": "Archivo"
+    },
+    "chosen": false
+   },
+   {
+    "name": "Kryo Corporate Flow",
+    "skill": "saas",
+    "skillName": "Precision SaaS",
+    "colors": {
+     "bg": "#F8FAFC",
+     "primary": "#0B8177",
+     "accent": "#0F172A",
+     "ink": "#0F172A"
+    },
+    "fonts": {
+     "display": "Plus Jakarta Sans"
+    },
+    "chosen": false
+   }
+  ],
+  "code": {
+   "file": "ControlRoom.jsx",
+   "code": "    <main className=\"min-h-screen bg-bg text-ink font-body flex flex-col selection:bg-primary/2…\n      <header className=\"h-7 bg-surface-2 border-b border-line flex items-center justify-betwee…\n        <div className=\"flex items-center gap-4 overflow-hidden truncate whitespace-nowrap\">\n          <span className=\"flex items-center gap-1.5 text-primary\">\n            <span className=\"w-1.5 h-1.5 bg-primary rounded-full animate-pulse\" />\n            <span>\n              SYS_LIVE\n            </span>\n          </span>\n          <span className=\"text-muted\">\n            |\n          </span>\n          <span className=\"text-ink\">\n            HYD-DEL CORRIDOR:\n            <span className=\"text-primary font-bold\">\n              102 REEFERS STABLE\n            </span>\n          </span>\n          <span className=\"text-muted\">\n            |\n          </span>\n          <span className=\"text-ink\">\n            RATNAGIRI-MUMBAI:\n            <span className=\"text-accent font-bold\">\n              4 AMBIENT SHIFTS\n            </span>\n          </span>\n          <span className=\"text-muted\">\n            |\n          </span>\n          <span className=\"text-muted\">\n            GLOBAL OUTSIDE MAX:\n            <span className=\"text-accent\">\n              44.5°C (NAGPUR BYPASS)"
+  }
+ },
+ {
+  "slug": "together-money",
+  "name": "Bandhan",
+  "tagline": "Two salaries. One shared life. Zero money friction.",
+  "prompt": "A shared money app for couples in Mumbai to plan rent, savings goals and weekend spends together",
+  "platform": "mobile",
+  "skill": "finance",
+  "skillName": "Calm Finance",
+  "systemName": "Calm Monsoon",
+  "colors": {
+   "bg": "#F5F6F5",
+   "surface": "#FFFFFF",
+   "primary": "#1E272C",
+   "accent": "#1DB97D",
+   "ink": "#1E272C"
+  },
+  "fonts": {
+   "display": "Manrope",
+   "body": "Manrope"
+  },
+  "brief": {
+   "audience": "Young working couples, live-in partners, and newlyweds in Mumbai managing joint household expenses",
+   "heroObject": "The combined monthly balance and shared goal progress rings",
+   "summary": "A modern collaborative ledger designed for couples in Mumbai to pool their funds, sync on monthly rent, track their Alibaug weekend savings, and auto-split daily Bandra cafe spends without the awkward math."
+  },
+  "screens": [
+   {
+    "id": "home-ledger",
+    "name": "Pool",
+    "patternName": "Big-number ledger",
+    "w": 390,
+    "h": 1227
+   },
+   {
+    "id": "welcome",
+    "name": "Invite",
+    "patternName": "Product as hero",
+    "w": 390,
+    "h": 1146
+   },
+   {
+    "id": "goals-bento",
+    "name": "Goals",
+    "patternName": "Rings and gauges",
+    "w": 390,
+    "h": 1666
+   },
+   {
+    "id": "spends-list",
+    "name": "Spends",
+    "patternName": "Ledger",
+    "w": 390,
+    "h": 1409
+   },
+   {
+    "id": "partner-profile",
+    "name": "Us",
+    "patternName": "Identity header with tabs",
+    "w": 390,
+    "h": 1425
+   }
+  ],
+  "directions": [
+   {
+    "name": "Calm Monsoon",
+    "skill": "finance",
+    "skillName": "Calm Finance",
+    "colors": {
+     "bg": "#F5F6F5",
+     "primary": "#1E272C",
+     "accent": "#1DB97D",
+     "ink": "#1E272C"
+    },
+    "fonts": {
+     "display": "Manrope"
+    },
+    "chosen": true
+   },
+   {
+    "name": "Bandra Breeze",
+    "skill": "soft",
+    "skillName": "Crafted Consumer",
+    "colors": {
+     "bg": "#F9F6F0",
+     "primary": "#CD3A24",
+     "accent": "#5E8C83",
+     "ink": "#2D2924"
+    },
+    "fonts": {
+     "display": "Bricolage Grotesque"
+    },
+    "chosen": false
+   },
+   {
+    "name": "Bandra Local",
+    "skill": "swiss",
+    "skillName": "Swiss Grid",
+    "colors": {
+     "bg": "#FFFFFF",
+     "primary": "#D14600",
+     "accent": "#000000",
+     "ink": "#000000"
+    },
+    "fonts": {
+     "display": "Archivo"
+    },
+    "chosen": false
+   }
+  ],
+  "code": {
+   "file": "Pool.jsx",
+   "code": "    <main className=\"min-h-screen bg-bg text-ink font-body pb-32\">\n      <header className=\"pt-4 px-5 pb-2 flex items-center justify-between\">\n        <div className=\"flex items-center gap-2\">\n          <div className=\"w-8 h-8 rounded-full bg-primary flex items-center justify-center text…\n            B\n          </div>\n          <div>\n            <h1 className=\"text-[14px] font-bold text-ink leading-tight\">\n              Bandhan\n            </h1>\n            <p className=\"text-[11px] text-muted\">\n              Karan & Ananya · Bandra\n            </p>\n          </div>\n        </div>\n        <div className=\"flex items-center gap-1.5\">\n          <span className=\"inline-block w-2 h-2 rounded-full bg-accent animate-pulse\" />\n          <span className=\"text-[12px] font-medium text-muted\">\n            Synced\n          </span>\n        </div>\n      </header>\n      <section className=\"px-4 pt-2 pb-4\">\n        <div className=\"bg-primary text-on-primary rounded-xl p-6 shadow-card relative overflow…\n          <div className=\"absolute right-0 bottom-0 opacity-[0.03] pointer-events-none\">\n            <span className=\"icon text-[180px] leading-none\">\n              account_balance_wallet\n            </span>\n          </div>\n          <div className=\"flex items-center justify-between mb-4\">\n            <span className=\"text-[12px] uppercase tracking-wider text-on-primary/60 font-semib…\n              Combined Pool Balance\n            </span>\n            <span className=\"px-2.5 py-1 bg-accent/20 text-accent rounded-full text-[11px] font…"
+  }
+ },
+ {
+  "slug": "purani-dilli",
+  "name": "Delhi-6",
+  "tagline": "The sensory map of Walled Delhi's spices, streets, and stories",
+  "prompt": "An online magazine about the food and street culture of Old Delhi, with long reads, photo essays and walking guides",
+  "platform": "website",
+  "skill": "editorial",
+  "skillName": "Editorial",
+  "systemName": "Delhi-6 Chronicle",
+  "colors": {
+   "bg": "#FCFCFA",
+   "surface": "#FCFCFA",
+   "primary": "#8C1D1D",
+   "accent": "#1A5C50",
+   "ink": "#17150F"
+  },
+  "fonts": {
+   "display": "Newsreader",
+   "body": "Source Serif 4"
+  },
+  "brief": {
+   "audience": "Culinary travelers, heritage enthusiasts, and home cooks seeking the authentic stories, recipes, and routes of Shahjahanabad",
+   "heroObject": "The photo: steaming bowls of Nihari, layers of parathas, and the vibrant lanes of Matia Mahal",
+   "summary": "An immersive digital magazine and archive of Old Delhi's culinary heritage, documenting the centuries-old sweetshops, spice merchants, and street corners through long-form journalism and interactive guides."
+  },
+  "screens": [
+   {
+    "id": "landing-home",
+    "name": "The Front Page",
+    "patternName": "Split editorial",
+    "w": 1440,
+    "h": 2593
+   },
+   {
+    "id": "long-reads",
+    "name": "Essays & Stories",
+    "patternName": "Editorial shelves",
+    "w": 1440,
+    "h": 3391
+   },
+   {
+    "id": "walking-guides",
+    "name": "Trails & Maps",
+    "patternName": "Map plus sheet",
+    "w": 1440,
+    "h": 906
+   },
+   {
+    "id": "story-detail",
+    "name": "The Nihari Master",
+    "patternName": "Long-form editorial",
+    "w": 1440,
+    "h": 4200
+   }
+  ],
+  "directions": [
+   {
+    "name": "Delhi-6 Chronicle",
+    "skill": "editorial",
+    "skillName": "Editorial",
+    "colors": {
+     "bg": "#FCFCFA",
+     "primary": "#8C1D1D",
+     "accent": "#1A5C50",
+     "ink": "#17150F"
+    },
+    "fonts": {
+     "display": "Newsreader"
+    },
+    "chosen": true
+   },
+   {
+    "name": "Delhi-6 Pulp",
+    "skill": "riso",
+    "skillName": "Risograph",
+    "colors": {
+     "bg": "#F5ECE1",
+     "primary": "#C3361A",
+     "accent": "#2B8C68",
+     "ink": "#1E2B58"
+    },
+    "fonts": {
+     "display": "Bricolage Grotesque"
+    },
+    "chosen": false
+   },
+   {
+    "name": "Delhi-6 Heritage",
+    "skill": "luxury",
+    "skillName": "Quiet Luxury",
+    "colors": {
+     "bg": "#121211",
+     "primary": "#C29A5B",
+     "accent": "#4D6B5A",
+     "ink": "#EADECC"
+    },
+    "fonts": {
+     "display": "Cormorant Garamond"
+    },
+    "chosen": false
+   }
+  ],
+  "code": {
+   "file": "TheFrontPage.jsx",
+   "code": "    <main className=\"min-h-screen bg-bg text-ink selection:bg-primary/10 select-none pb-24 md:p…\n      <header className=\"w-full border-b border-line bg-bg py-4 px-4 md:px-8 flex items-center …\n        <div className=\"flex items-baseline gap-6\">\n          <a onClick={() => go(\"landing-home\")} data-nav=\"landing-home\" href=\"#\" className=\"fon…\n            Delhi-6\n            <span className=\"font-mono text-[13px] tracking-wider text-muted uppercase ml-2\">\n              Chronicle\n            </span>\n          </a>\n        </div>\n        <nav className=\"hidden md:flex items-center gap-8\">\n          <a onClick={() => go(\"landing-home\")} data-nav=\"landing-home\" href=\"#\" className=\"fon…\n            Issue Home\n          </a>\n          <a onClick={() => go(\"long-reads\")} data-nav=\"long-reads\" href=\"#\" className=\"font-bo…\n            Stories\n          </a>\n          <a onClick={() => go(\"walking-guides\")} data-nav=\"walking-guides\" href=\"#\" className=…\n            Guides\n          </a>\n        </nav>\n        <div className=\"flex items-center gap-4\">\n          <span className=\"font-mono text-[13px] text-muted hidden lg:inline-block\">\n            Issue No. 04 · Winter 2024\n          </span>\n          <button type=\"button\" aria-label=\"Search Archive\" className=\"p-2 hover:bg-surface-2 t…\n            <span className=\"icon text-[20px]\">\n              search\n            </span>\n          </button>\n          <button type=\"button\" aria-label=\"Menu\" className=\"md:hidden p-2 hover:bg-surface-2 t…\n            <span className=\"icon text-[20px]\">\n              menu\n            </span>"
+  }
+ },
+ {
+  "slug": "radio-board",
+  "name": "Waveform 91",
+  "tagline": "The open-air grid for Bengaluru's independent voices",
+  "prompt": "A scheduling board for a community radio station in Bengaluru: shows, volunteer hosts and the weekly on-air grid",
+  "platform": "web",
+  "skill": "neopop",
+  "skillName": "Neo-Pop",
+  "systemName": "Waveform Riot",
+  "colors": {
+   "bg": "#F9F8F3",
+   "surface": "#FFDE4D",
+   "primary": "#1469F4",
+   "accent": "#F43F5E",
+   "ink": "#111111"
+  },
+  "fonts": {
+   "display": "Bricolage Grotesque",
+   "body": "Plus Jakarta Sans"
+  },
+  "brief": {
+   "audience": "Bengaluru community radio hosts, bedroom DJs, podcasters, and volunteer studio engineers",
+   "heroObject": "The weekly broadcast grid showing current on-air show, upcoming live shifts, and vacant volunteer slots",
+   "summary": "A collaborative scheduling dashboard for community radio hosts, engineers, and volunteers to claim slots, manage show archives, and coordinate the live studio feed in real-time."
+  },
+  "screens": [
+   {
+    "id": "broadcast-grid",
+    "name": "On-Air Grid",
+    "patternName": "Agenda rail",
+    "w": 1440,
+    "h": 1762
+   },
+   {
+    "id": "show-directory",
+    "name": "Shows",
+    "patternName": "Chip-refined product grid",
+    "w": 1440,
+    "h": 1652
+   },
+   {
+    "id": "volunteer-rota",
+    "name": "Volunteer Rota",
+    "patternName": "Checklist",
+    "w": 1440,
+    "h": 1301
+   },
+   {
+    "id": "studio-insights",
+    "name": "Studio Stats",
+    "patternName": "Narrative insight",
+    "w": 1440,
+    "h": 1498
+   },
+   {
+    "id": "host-profile",
+    "name": "Host Hub",
+    "patternName": "Identity header with tabs",
+    "w": 1440,
+    "h": 1692
+   }
+  ],
+  "directions": [
+   {
+    "name": "Waveform Riot",
+    "skill": "neopop",
+    "skillName": "Neo-Pop",
+    "colors": {
+     "bg": "#F9F8F3",
+     "primary": "#1469F4",
+     "accent": "#F43F5E",
+     "ink": "#111111"
+    },
+    "fonts": {
+     "display": "Bricolage Grotesque"
+    },
+    "chosen": true
+   },
+   {
+    "name": "Kranz Grid",
+    "skill": "swiss",
+    "skillName": "Swiss Grid",
+    "colors": {
+     "bg": "#FFFFFF",
+     "primary": "#E30613",
+     "accent": "#000000",
+     "ink": "#000000"
+    },
+    "fonts": {
+     "display": "Archivo"
+    },
+    "chosen": false
+   },
+   {
+    "name": "Soil & Frequency",
+    "skill": "organic",
+    "skillName": "Grounded Natural",
+    "colors": {
+     "bg": "#F5F2EB",
+     "primary": "#274235",
+     "accent": "#BC542F",
+     "ink": "#2D2621"
+    },
+    "fonts": {
+     "display": "Fraunces"
+    },
+    "chosen": false
+   }
+  ],
+  "code": {
+   "file": "OnAirGrid.jsx",
+   "code": "    <main className=\"min-h-screen bg-surface text-ink font-['Plus_Jakarta_Sans'] flex flex-col …\n      <aside className=\"w-full md:w-64 flex-shrink-0 p-4 md:p-6 md:sticky md:top-0 md:h-screen …\n        <div className=\"space-y-6\">\n          <div className=\"flex items-center gap-3 p-2 bg-surface border-3 border-line rounded-m…\n            <div className=\"w-8 h-8 rounded-sm bg-ink flex items-center justify-center border-2…\n              <span className=\"icon text-on-primary text-[18px] font-bold\">\n                radio\n              </span>\n            </div>\n            <div>\n              <h1 className=\"font-['Bricolage_Grotesque'] font-extrabold text-[16px] leading-no…\n                WAVEFORM 91\n              </h1>\n              <p className=\"font-['Azeret_Mono'] text-[11px] uppercase tracking-wider text-mute…\n                BLR INDIE GRID\n              </p>\n            </div>\n          </div>\n          <nav className=\"flex flex-row md:flex-col overflow-x-auto md:overflow-visible gap-2 p…\n            <button type=\"button\" onClick={() => go(\"broadcast-grid\")} data-nav=\"broadcast-grid…\n              <span className=\"icon text-[20px]\">\n                calendar_view_week\n              </span>\n              <span>\n                Grid\n              </span>\n            </button>\n            <button type=\"button\" onClick={() => go(\"show-directory\")} data-nav=\"show-directory…\n              <span className=\"icon text-[20px]\">\n                radio\n              </span>\n              <span>\n                Shows\n              </span>"
+  }
+ },
+ {
+  "slug": "do-cutting",
+  "name": "ChaiCut",
+  "tagline": "Two perfect cups a day. No more, no less.",
+  "prompt": "A habit tracker for chai lovers in Bengaluru who want to cut down to two cups a day",
+  "platform": "mobile",
+  "skill": "soft",
+  "skillName": "Crafted Consumer",
+  "systemName": "Kulhad Cozy",
+  "colors": {
+   "bg": "#FAF5F0",
+   "surface": "#FFFDFB",
+   "primary": "#C83F23",
+   "accent": "#4A7C59",
+   "ink": "#402E2A"
+  },
+  "fonts": {
+   "display": "Bricolage Grotesque",
+   "body": "Plus Jakarta Sans"
+  },
+  "brief": {
+   "audience": "Bengaluru developers, tech workers, and students who drink 5+ cups of tapri or office chai daily and want to limit it to two high-quality sessions.",
+   "heroObject": "The today count and your remaining cup budget, framed as warm, glowing liquid states.",
+   "summary": "A habit companion designed specifically for Bengaluru's chai lovers to enjoy their daily brew mindfully, reducing caffeine and acidity while keeping the ritual alive."
+  },
+  "screens": [
+   {
+    "id": "today-tracker",
+    "name": "Today",
+    "patternName": "Action-first launcher",
+    "w": 390,
+    "h": 1192
+   },
+   {
+    "id": "onboarding-ritual",
+    "name": "Your Ritual",
+    "patternName": "One question per screen",
+    "w": 390,
+    "h": 1242
+   },
+   {
+    "id": "stomach-insights",
+    "name": "Gut Check",
+    "patternName": "Rings and gauges",
+    "w": 390,
+    "h": 1366
+   },
+   {
+    "id": "chai-alternatives",
+    "name": "Brews",
+    "patternName": "Editorial shelves",
+    "w": 390,
+    "h": 1500
+   },
+   {
+    "id": "profile-achievements",
+    "name": "My Sip",
+    "patternName": "Passport / trophy case",
+    "w": 390,
+    "h": 1770
+   }
+  ],
+  "directions": [
+   {
+    "name": "Kulhad Cozy",
+    "skill": "soft",
+    "skillName": "Crafted Consumer",
+    "colors": {
+     "bg": "#FAF5F0",
+     "primary": "#C83F23",
+     "accent": "#4A7C59",
+     "ink": "#402E2A"
+    },
+    "fonts": {
+     "display": "Bricolage Grotesque"
+    },
+    "chosen": true
+   },
+   {
+    "name": "Chai Compiler",
+    "skill": "swiss",
+    "skillName": "Swiss Grid",
+    "colors": {
+     "bg": "#121212",
+     "primary": "#FF3B30",
+     "accent": "#007AFF",
+     "ink": "#FFFFFF"
+    },
+    "fonts": {
+     "display": "Archivo"
+    },
+    "chosen": false
+   },
+   {
+    "name": "Kadak Pop",
+    "skill": "neopop",
+    "skillName": "Neo-Pop",
+    "colors": {
+     "bg": "#FFFDF5",
+     "primary": "#111111",
+     "accent": "#FF6B6B",
+     "ink": "#1E1E1E"
+    },
+    "fonts": {
+     "display": "Unbounded"
+    },
+    "chosen": false
+   }
+  ],
+  "code": {
+   "file": "Today.jsx",
+   "code": "    <main className=\"min-h-screen bg-bg text-ink pb-36 font-body antialiased\">\n      <header className=\"pt-6 px-6 pb-2\">\n        <div className=\"flex items-center justify-between\">\n          <div>\n            <span className=\"font-mono text-[12px] uppercase tracking-wider text-muted mb-1.5 b…\n              Namma Bengaluru · 24°C\n            </span>\n            <h1 className=\"font-display text-[22px] font-bold text-ink tracking-tight\">\n              Hey Ananya, keep it cozy\n            </h1>\n          </div>\n          <div className=\"h-10 w-10 rounded-full border border-line bg-surface-2 overflow-hidde…\n            <span className=\"icon text-primary text-[24px]\">\n              local_cafe\n            </span>\n          </div>\n        </div>\n      </header>\n      <section className=\"px-6 py-4\">\n        <div className=\"bg-surface rounded-xl p-6 border border-line shadow-card transition-all…\n          <div className=\"absolute -right-16 -top-16 w-48 h-48 bg-primary/5 rounded-full blur-3…\n          <div className=\"flex justify-between items-start mb-6\">\n            <div>\n              <span className=\"font-mono text-[12px] uppercase tracking-wider text-muted mb-1.5…\n                Daily Brew Budget\n              </span>\n              <div className=\"flex items-baseline gap-1\">\n                <span className=\"font-display text-[54px] font-extrabold text-primary leading-n…\n                  1\n                </span>\n                <span className=\"font-display text-[22px] font-bold text-muted\">\n                  / 2 cups enjoyed\n                </span>\n              </div>"
+  }
+ },
+ {
+  "slug": "atelier-lisboa",
+  "name": "Norte Sul",
+  "tagline": "Civic space shaped by Atlantic light and Portuguese granite",
+  "prompt": "The portfolio of a small architecture studio in Lisbon that designs libraries, schools and other public buildings",
+  "platform": "website",
+  "skill": "studio",
+  "skillName": "Studio Portfolio",
+  "systemName": "Norte Sul Monumental",
+  "colors": {
+   "bg": "#F9F6F0",
+   "surface": "#F2EDE4",
+   "primary": "#7D6F56",
+   "accent": "#9E401B",
+   "ink": "#111111"
+  },
+  "fonts": {
+   "display": "Instrument Serif",
+   "body": "Instrument Sans"
+  },
+  "brief": {
+   "audience": "Municipal planners, culture commissioners, educational foundations, and architectural juries globally",
+   "heroObject": "The physical model and construction photography of public structures",
+   "summary": "The digital portfolio of Norte Sul, a Lisbon-based architecture collective designing schools, public squares, and libraries that ground communities in materials that outlast them."
+  },
+  "screens": [
+   {
+    "id": "cover",
+    "name": "Work",
+    "patternName": "Statement plus product slab",
+    "w": 1440,
+    "h": 2945
+   },
+   {
+    "id": "archive",
+    "name": "Archive",
+    "patternName": "Masonry",
+    "w": 1440,
+    "h": 2415
+   },
+   {
+    "id": "case-study",
+    "name": "Marvila",
+    "patternName": "Long-form editorial",
+    "w": 1440,
+    "h": 3681
+   },
+   {
+    "id": "profile",
+    "name": "Studio",
+    "patternName": "Identity header with tabs",
+    "w": 1440,
+    "h": 2143
+   }
+  ],
+  "directions": [
+   {
+    "name": "Norte Sul Monumental",
+    "skill": "studio",
+    "skillName": "Studio Portfolio",
+    "colors": {
+     "bg": "#F9F6F0",
+     "primary": "#7D6F56",
+     "accent": "#9E401B",
+     "ink": "#111111"
+    },
+    "fonts": {
+     "display": "Instrument Serif"
+    },
+    "chosen": true
+   },
+   {
+    "name": "Norte Sul Swiss Grid",
+    "skill": "swiss",
+    "skillName": "Swiss Grid",
+    "colors": {
+     "bg": "#FFFFFF",
+     "primary": "#E30613",
+     "accent": "#000000",
+     "ink": "#000000"
+    },
+    "fonts": {
+     "display": "Archivo"
+    },
+    "chosen": false
+   },
+   {
+    "name": "Norte Sul Poured Raw",
+    "skill": "brutalist",
+    "skillName": "Raw Brutalism",
+    "colors": {
+     "bg": "#EFEFEF",
+     "primary": "#1E3B33",
+     "accent": "#D24021",
+     "ink": "#0E1815"
+    },
+    "fonts": {
+     "display": "Archivo"
+    },
+    "chosen": false
+   }
+  ],
+  "code": {
+   "file": "Work.jsx",
+   "code": "    <main className=\"min-h-screen bg-bg text-ink selection:bg-surface-2 selection:text-ink pb-2…\n      <header className=\"bg-bg/85 backdrop-blur-md sticky top-0 z-50 border-b border-line\" data…\n        <div className=\"max-w-[1280px] mx-auto px-4 md:px-8 h-20 flex justify-between items-cen…\n          <div className=\"flex items-center gap-4\">\n            <a onClick={() => go(\"cover\")} data-nav=\"cover\" className=\"font-display text-[24px]…\n              Norte Sul\n            </a>\n            <div className=\"hidden sm:flex items-center gap-2 bg-surface px-3 py-1 rounded-full…\n              <span className=\"w-1.5 h-1.5 rounded-full bg-ink\" />\n              <span className=\"font-mono text-[11px] text-muted uppercase tracking-wider\">\n                Lisboa · Oct 2025\n              </span>\n            </div>\n          </div>\n          <nav className=\"flex items-center gap-6 md:gap-8\">\n            <a onClick={() => go(\"cover\")} data-nav=\"cover\" className=\"font-body text-[15px] te…\n              <span className=\"icon text-[18px]\">\n                architecture\n              </span>\n              Work\n            </a>\n            <a onClick={() => go(\"archive\")} data-nav=\"archive\" className=\"font-body text-[15px…\n              <span className=\"icon text-[18px]\">\n                photo_library\n              </span>\n              Archive\n            </a>\n            <a onClick={() => go(\"profile\")} data-nav=\"profile\" className=\"font-body text-[15px…\n              <span className=\"icon text-[18px]\">\n                corporate_fare\n              </span>\n              Studio\n            </a>\n          </nav>"
+  }
+ },
+ {
+  "slug": "tally-podcasts",
+  "name": "Decibel",
+  "tagline": "Turn listener patterns into enterprise sponsorship",
+  "prompt": "An analytics workspace for independent podcast creators: listener growth, episode retention and sponsorship revenue",
+  "platform": "web",
+  "skill": "saas",
+  "skillName": "Precision SaaS",
+  "systemName": "Obsidian Precision",
+  "colors": {
+   "bg": "#0D0E11",
+   "surface": "#16181D",
+   "primary": "#39FF14",
+   "accent": "#00F0FF",
+   "ink": "#F3F4F6"
+  },
+  "fonts": {
+   "display": "Host Grotesk",
+   "body": "Inter Tight"
+  },
+  "brief": {
+   "audience": "Independent podcast networks, audio creators, and boutique show producers",
+   "heroObject": "The absolute reach and blended listener retention metrics across Apple Podcasts, Spotify, and YouTube",
+   "summary": "An analytics and inventory platform built specifically for independent podcast networks to understand listener retention, track cross-platform growth, and pitch sponsors with real-time performance metrics."
+  },
+  "screens": [
+   {
+    "id": "portfolio",
+    "name": "Network",
+    "patternName": "KPI strip, chart, table",
+    "w": 1440,
+    "h": 1105
+   },
+   {
+    "id": "episode-insights",
+    "name": "Episodes",
+    "patternName": "Narrative insight",
+    "w": 1440,
+    "h": 1281
+   },
+   {
+    "id": "inventory",
+    "name": "Sponsorships",
+    "patternName": "Inset grouped",
+    "w": 1440,
+    "h": 1320
+   },
+   {
+    "id": "pitch-builder",
+    "name": "Pitch Deck",
+    "patternName": "Sticky buy column",
+    "w": 1440,
+    "h": 900
+   }
+  ],
+  "directions": [
+   {
+    "name": "Obsidian Precision",
+    "skill": "saas",
+    "skillName": "Precision SaaS",
+    "colors": {
+     "bg": "#0D0E11",
+     "primary": "#39FF14",
+     "accent": "#00F0FF",
+     "ink": "#F3F4F6"
+    },
+    "fonts": {
+     "display": "Host Grotesk"
+    },
+    "chosen": true
+   },
+   {
+    "name": "Helvetica Signal",
+    "skill": "swiss",
+    "skillName": "Swiss Grid",
+    "colors": {
+     "bg": "#FFFFFF",
+     "primary": "#E30613",
+     "accent": "#000000",
+     "ink": "#000000"
+    },
+    "fonts": {
+     "display": "Archivo"
+    },
+    "chosen": false
+   },
+   {
+    "name": "The Audio Gazette",
+    "skill": "editorial",
+    "skillName": "Editorial",
+    "colors": {
+     "bg": "#FCFCFA",
+     "primary": "#8F2C2C",
+     "accent": "#2C516E",
+     "ink": "#17150F"
+    },
+    "fonts": {
+     "display": "Cormorant Garamond"
+    },
+    "chosen": false
+   }
+  ],
+  "code": {
+   "file": "Network.jsx",
+   "code": "    <div className=\"min-h-screen bg-ink text-on-primary font-body flex overflow-hidden selectio…\n      <aside className=\"w-[240px] h-screen bg-ink border-r border-line flex flex-col p-4 justif…\n        <div className=\"space-y-6\">\n          <div className=\"flex items-center gap-2.5 px-3 py-2\">\n            <div className=\"w-6 h-6 rounded bg-surface/10 border border-line/30 flex items-cent…\n              <span className=\"icon text-on-primary text-[16px] font-bold\">\n                equalizer\n              </span>\n            </div>\n            <span className=\"font-display font-semibold text-[16px] tracking-tight text-on-prim…\n              DECIBEL\n            </span>\n          </div>\n          <nav className=\"space-y-1\">\n            <a href=\"#\" onClick={() => go(\"portfolio\")} data-nav=\"portfolio\" className=\"flex it…\n              <span className=\"icon text-[18px]\">\n                analytics\n              </span>\n              <span>\n                Network\n              </span>\n            </a>\n            <a href=\"#\" onClick={() => go(\"episode-insights\")} data-nav=\"episode-insights\" clas…\n              <span className=\"icon text-[18px]\">\n                equalizer\n              </span>\n              <span>\n                Episodes\n              </span>\n            </a>\n            <a href=\"#\" onClick={() => go(\"inventory\")} data-nav=\"inventory\" className=\"flex it…\n              <span className=\"icon text-[18px]\">\n                monetization_on\n              </span>"
+  }
+ }
+]
