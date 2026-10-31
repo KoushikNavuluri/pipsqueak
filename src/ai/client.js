@@ -1,6 +1,6 @@
-import { supabase } from "../supabase";
+import { SUPABASE_KEY, SUPABASE_URL, supabase } from "../supabase";
 
-const ENDPOINT = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai`;
+const ENDPOINT = `${SUPABASE_URL}/functions/v1/ai`;
 
 export class AiError extends Error {
   constructor(message, { status = 0, quota = null } = {}) {
@@ -18,7 +18,7 @@ async function headers() {
   }
   return {
     "Content-Type": "application/json",
-    apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    apikey: SUPABASE_KEY,
     Authorization: `Bearer ${token}`,
   };
 }

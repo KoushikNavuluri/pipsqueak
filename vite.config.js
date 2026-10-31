@@ -3,6 +3,9 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  // VITE_* for local development, NEXT_PUBLIC_* from the Vercel Supabase
+  // integration. Only these public prefixes ever reach the browser.
+  envPrefix: ["VITE_", "NEXT_PUBLIC_"],
   build: {
     rollupOptions: {
       output: {
