@@ -1,7 +1,7 @@
 // Exports for design-engine projects: a clickable HTML prototype, a React +
 // Vite + Tailwind v4 project, DESIGN.md and tokens. Every export is a map of
 // file path → contents, zipped by the caller.
-import { ICON_FAMILIES, THEME, buildFrameDoc, iconNames, resolveImages, systemVars, varsCss } from "./frameDoc.js";
+import { ICON_FAMILIES, THEME, buildFrameDoc, esc, iconNames, resolveImages, systemVars, varsCss } from "./frameDoc.js";
 import { fontsUrl } from "./fonts.js";
 import { designMd, tokensCss } from "./system.js";
 import { htmlToJsx } from "./htmlTools.js";
@@ -28,13 +28,13 @@ export function htmlPrototype(project) {
   }
   const cards = screens
     .map(
-      (s) => `<a class="card" href="${s.id}.html"><iframe src="${s.id}.html" width="${vp.w}" height="${vp.h}" loading="lazy" tabindex="-1"></iframe><span>${s.name}</span></a>`,
+      (s) => `<a class="card" href="${s.id}.html"><iframe src="${s.id}.html" width="${vp.w}" height="${vp.h}" loading="lazy" tabindex="-1"></iframe><span>${esc(s.name)}</span></a>`,
     )
     .join("\n");
   const scale = vp.w > 600 ? 0.3 : 0.6;
   files["index.html"] = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${project.name}</title>
+<title>${esc(project.name)}</title>
 <style>
 body{margin:0;font:15px/1.5 system-ui,sans-serif;background:#F1F0EC;color:#16161A}
 header{padding:40px 48px 8px}h1{margin:0;font-size:28px}p{margin:4px 0 0;color:#62626A}
@@ -44,7 +44,7 @@ main{display:flex;flex-wrap:wrap;gap:40px;padding:32px 48px 64px}
 </style>
 <script>addEventListener("load",function(){document.querySelectorAll(".card iframe").forEach(function(f){f.style.width="${vp.w}px";f.style.height="${vp.h}px";f.style.transform="scale(${scale})";f.parentElement.style.width="${Math.round(vp.w * scale)}px";f.parentElement.style.height="${Math.round(vp.h * scale) + 30}px";});});</script>
 </head><body>
-<header><h1>${project.name}</h1><p>${project.tagline || ""}</p></header>
+<header><h1>${esc(project.name)}</h1><p>${esc(project.tagline || "")}</p></header>
 <main>
 ${cards}
 </main>
@@ -99,7 +99,7 @@ export default defineConfig({
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${project.name}</title>
+    <title>${esc(project.name)}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     ${fonts ? `<link rel="stylesheet" href="${fonts}" />` : ""}

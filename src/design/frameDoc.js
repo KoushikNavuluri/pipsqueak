@@ -113,7 +113,7 @@ const hashString = (s) => {
   }
   return h >>> 0;
 };
-const esc = (s) => String(s).replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" })[c]);
+export const esc = (s) => String(s).replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;" })[c]);
 
 // An art-directed placeholder for an image that hasn't been painted yet: a
 // tonal field in the system's colors with the subject set in small mono type.

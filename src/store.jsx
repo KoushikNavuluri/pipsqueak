@@ -36,9 +36,17 @@ const initial = (data) => ({
   trash: null,
 });
 
-// Conversation and review belong to the project but not to its undo history:
-// undo and redo restore the design and keep these as they are.
-const keepMeta = (snapshot, current) => ({ ...snapshot, chat: current.chat, review: current.review });
+// Conversation, review, the star, generated images and the shared shell
+// change only through silent edits, so they aren't in undo history: undo and
+// redo restore the design and keep these as they are.
+const keepMeta = (snapshot, current) => ({
+  ...snapshot,
+  chat: current.chat,
+  review: current.review,
+  fav: current.fav,
+  kit: current.kit,
+  shell: current.shell,
+});
 
 function reducer(state, action) {
   const data = (patch) => ({ ...state, data: { ...state.data, ...patch } });
@@ -80,6 +88,7 @@ function reducer(state, action) {
       const h = state.hist[action.id];
       if (!h?.past.length) return state;
       const current = state.data.projects.find((p) => p.id === action.id);
+      if (!current) return state;
       const prev = h.past[h.past.length - 1];
       return {
         ...data({ projects: state.data.projects.map((p) => (p.id === action.id ? keepMeta(prev, current) : p)) }),
@@ -91,6 +100,7 @@ function reducer(state, action) {
       const h = state.hist[action.id];
       if (!h?.future.length) return state;
       const current = state.data.projects.find((p) => p.id === action.id);
+      if (!current) return state;
       const next = h.future[0];
       return {
         ...data({ projects: state.data.projects.map((p) => (p.id === action.id ? keepMeta(next, current) : p)) }),
