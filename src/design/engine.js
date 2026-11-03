@@ -357,29 +357,35 @@ export async function paintKitImage({ userId, projectId, item, system, name, sig
         aspect: item.aspect,
         direction: system.imagery,
         app: { name, accent: system.colors.primary, accent2: system.colors.accent, background: system.colors.bg },
+        projectId,
       },
       { signal },
     );
   // The image model is often briefly overloaded (502 from our function);
   // retrying after a growing pause usually lands. Failures cost no credits.
   let image;
+  let upload = null;
   for (const wait of [0, 5000, 12000]) {
     if (wait) await new Promise((r) => setTimeout(r, wait));
     try {
-      ({ image } = await ask());
+      ({ image, upload = null } = await ask());
       break;
     } catch (err) {
       if (err.status !== 502 || wait === 12000) throw err;
     }
   }
   const blob = await shrink(image.data, image.mimeType, 1100);
-  let path = `${userId}/${projectId}/kit-${uid()}.webp`;
+  const bucket = supabase.storage.from("artwork");
+  // The Edge Function hands out a one-time upload slot with each image. (The
+  // direct upload is only for a function deployed before slots existed.)
+  let path = upload?.path || `${userId}/${projectId}/kit-${uid()}.webp`;
+  const put = () => (upload ? bucket.uploadToSignedUrl(upload.path, upload.token, blob, { contentType: "image/webp" }) : bucket.upload(path, blob, { contentType: "image/webp" }));
   // Storage occasionally answers with a transient 5xx; try once more.
-  let { error } = await supabase.storage.from("artwork").upload(path, blob, { contentType: "image/webp" });
+  let { error } = await put();
   if (error && /5\d\d|fetch|network/i.test(error.message)) {
     await new Promise((r) => setTimeout(r, 1200));
-    path = `${userId}/${projectId}/kit-${uid()}.webp`;
-    ({ error } = await supabase.storage.from("artwork").upload(path, blob, { contentType: "image/webp" }));
+    if (!upload) path = `${userId}/${projectId}/kit-${uid()}.webp`;
+    ({ error } = await put());
   }
   if (error) {
     throw new Error("Couldn't save the image: " + error.message);

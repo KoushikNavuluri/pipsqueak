@@ -8,15 +8,22 @@ import {
   ImageIcon,
   LoaderCircle,
   Maximize,
+  MessageSquarePlus,
   Minus,
   MousePointer2,
   Play,
   Plus,
   Redo2,
   RotateCcw,
+  Share2,
+  Smartphone,
   Undo2,
   X,
 } from "lucide-react";
+import { displayName, useSession } from "../session";
+import { addComment, anchorFrom, anchorLabel, setResolved } from "../share";
+import { CommentsPanel, commentsInstruction, useComments } from "./panels/CommentsPanel";
+import { ShareDialog } from "./ShareDialog";
 import { useProject, useStore } from "../store";
 import { Logo, PipGlyph } from "../brand";
 import { Button, IconButton, Segmented, cx } from "../ui";
@@ -42,6 +49,7 @@ const TABS = [
   ["system", "System"],
   ["chat", "Chat"],
   ["review", "Review"],
+  ["comments", "Comments"],
   ["history", "History"],
 ];
 
@@ -63,10 +71,20 @@ export function CanvasStudio() {
   const [working, setWorking] = useState(false);
   const [renaming, setRenaming] = useState(null);
   const [zoom, setZoom] = useState(0.5);
+  const [sharing, setSharing] = useState(null);
+  const { user, profile } = useSession();
+  // Comments: a draft pinned to a just-clicked element, where each open
+  // comment's element is now ({ [screenId]: { [commentId]: { x, y, path, lost } } }),
+  // and the one being looked at.
+  const [draft, setDraft] = useState(null);
+  const [pinPos, setPinPos] = useState({});
+  const [focusComment, setFocusComment] = useState(null);
   // Frames whose CSS is cached open as static pages; look it up before mounting them.
   const [cssReady, setCssReady] = useState(false);
   useEffect(() => {
     loadCss(project.screens.map((sc) => sc.html)).finally(() => setCssReady(true));
+    // Version history isn't part of the sign-in load; fetch it now.
+    api.hydrate(project.id);
   }, [project.id]);
   // Frames then mount one at a time, left to right: every page mounting
   // at once made the browser lay them all out in one long freeze.
@@ -144,14 +162,20 @@ export function CanvasStudio() {
   };
 
   const handleFrameMessage = (screenId, m) => {
+    if (m.type === "ready") relocate(screenId);
+    else if (m.type === "size") relocateAll();
     if ((m.type === "size" || m.type === "ready") && m.h) {
       const h = Math.min(8000, Math.max(viewport.h, Math.ceil(m.h)));
       reportHeight(screenId, h);
       const sc = screenById(screenId);
       if (sc?.html && !studio.streams[screenId]) rememberHeight(viewport.w, sc.html, h);
+    } else if (m.type === "select" && tool === "comment") {
+      setSelection(m.path ? { screenId, info: m } : { screenId, info: null });
+      setDraft({ screenId, info: m.path ? m : null });
+      setTab("comments");
     } else if (m.type === "select") {
       setSelection(m.path ? { screenId, info: m } : { screenId, info: null });
-      setTab("design");
+      if (tab !== "comments") setTab("design");
       setWholeApp(false);
     } else if (m.type === "text") {
       const frame = studio.frames.current.get(screenId);
@@ -201,6 +225,137 @@ export function CanvasStudio() {
   }, [zoom]);
 
   const say = (text, tone) => api.toast(text, { tone });
+
+  // ----- comments -----
+  const commentState = useComments(project.id, (msg) => say(msg, "error"));
+  const openComments = commentState.comments.filter((c) => !c.resolved_at);
+  const openKey = openComments.map((c) => c.id + ":" + c.screen_id).join("|");
+  const commentsByScreen = useMemo(() => {
+    const m = new Map();
+    openComments.forEach((c, i) => m.set(c.screen_id, [...(m.get(c.screen_id) || []), { ...c, n: i + 1 }]));
+    return m;
+  }, [openKey]);
+  // Finds each open comment's element in its frame again (screens change).
+  const relocate = async (screenId) => {
+    const list = commentsByScreen.get(screenId) || [];
+    const frame = studio.frames.current.get(screenId);
+    if (!list.length || !frame) return setPinPos((p) => (p[screenId] ? { ...p, [screenId]: undefined } : p));
+    const found = (await frame.locate(list.map((c) => c.anchor || {}))) || [];
+    const spots = {};
+    list.forEach((c, i) => {
+      const hit = found[i];
+      const r = hit?.rect || c.anchor?.rect;
+      spots[c.id] = c.anchor?.tag ? (r ? { x: r.x + r.w, y: r.y, path: hit?.path || c.anchor.path, lost: !hit } : null) : { x: viewport.w - 36, y: 14, path: null };
+    });
+    setPinPos((p) => ({ ...p, [screenId]: spots }));
+  };
+  const relocateTimer = useRef(null);
+  const relocateAll = () => {
+    clearTimeout(relocateTimer.current);
+    relocateTimer.current = setTimeout(() => project.screens.forEach((sc) => relocate(sc.id)), 250);
+  };
+  useEffect(relocateAll, [openKey, viewportKey, mounted]);
+  const pinsFor = useMemo(() => {
+    const out = {};
+    for (const [screenId, list] of commentsByScreen) {
+      out[screenId] = list
+        .map((c) => {
+          const at = pinPos[screenId]?.[c.id];
+          return at && { id: c.id, n: c.n, x: at.x, y: at.y, lost: at.lost, focus: focusComment === c.id, title: `${c.author_name}: ${c.body.slice(0, 80)}` };
+        })
+        .filter(Boolean);
+    }
+    return out;
+  }, [commentsByScreen, pinPos, focusComment]);
+
+  const goToComment = (c) => {
+    setFocusComment(c.id);
+    const i = project.screens.findIndex((x) => x.id === c.screen_id);
+    if (i < 0) return;
+    const at = pinPos[c.screen_id]?.[c.id];
+    canvas.current?.fit({ x: i * (viewport.w + gap) - 40, y: Math.max(-60, (at?.y || 0) - viewport.h / 2), w: viewport.w + 80, h: viewport.h + 120 }, 48);
+    if (tool === "comment") setTool("select");
+    const path = at?.path || c.anchor?.path;
+    if (path) studio.frames.current.get(c.screen_id)?.post({ type: "select", path, report: true, scroll: true });
+    else selectScreen(c.screen_id);
+    setTimeout(() => setTab("comments"), 0);
+  };
+  const onPin = useCallback((id) => {
+    const c = commentState.comments.find((x) => x.id === id);
+    if (!c) return;
+    setTab("comments");
+    setFocusComment(id);
+    setTimeout(() => document.getElementById(`comment-${id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 50);
+  }, [commentState.comments]);
+
+  const commentTarget = draft
+    ? { label: anchorLabel(draft.info, screenById(draft.screenId)?.name), draft: true }
+    : selection?.info?.path
+      ? { label: anchorLabel(selection.info, selectedScreen?.name) }
+      : selectedScreen
+        ? { label: `${selectedScreen.name} (whole screen)` }
+        : null;
+  const postComment = async (body) => {
+    const where = draft || selection;
+    try {
+      const c = await addComment({
+        projectId: project.id,
+        screenId: where.screenId,
+        anchor: where.info ? anchorFrom(where.info) : {},
+        body,
+        authorName: displayName(user, profile).slice(0, 60),
+        authorId: user.id,
+      });
+      commentState.setComments((list) => (list.some((x) => x.id === c.id) ? list : [...list, c]));
+      setDraft(null);
+      setFocusComment(c.id);
+    } catch (err) {
+      say(err.message, "error");
+      throw err;
+    }
+  };
+  // Pip reworks each screen with open comments, then resolves the comments on
+  // screens it changed.
+  const askPipAboutComments = async (list) => {
+    const groups = new Map();
+    for (const c of list) {
+      if (!screenById(c.screen_id)?.html) continue;
+      groups.set(c.screen_id, [...(groups.get(c.screen_id) || []), c]);
+    }
+    if (!groups.size) return;
+    setWorking(true);
+    try {
+      const results = await Promise.all(
+        [...groups].map(async ([screenId, cs]) => {
+          try {
+            const res = await studio.aiEdit(screenId, commentsInstruction(cs, screenById(screenId).name), { label: `Resolved ${cs.length} comment${cs.length === 1 ? "" : "s"}` });
+            return { screenId, cs, changed: res.changed };
+          } catch (err) {
+            return { screenId, cs, error: err.message };
+          }
+        }),
+      );
+      const done = results.filter((r) => r.changed).flatMap((r) => r.cs);
+      if (done.length) {
+        await setResolved(done.map((c) => c.id), "Pip");
+        const at = new Date().toISOString();
+        commentState.setComments((all) => all.map((c) => (done.some((d) => d.id === c.id) ? { ...c, resolved_at: at, resolved_by: "Pip" } : c)));
+      }
+      const failed = results.filter((r) => r.error);
+      const unchanged = results.filter((r) => !r.changed && !r.error);
+      const summary = [
+        done.length ? `Resolved ${done.length} comment${done.length === 1 ? "" : "s"} on ${results.filter((r) => r.changed).map((r) => screenById(r.screenId)?.name).join(", ")}.` : "",
+        unchanged.length ? `Nothing changed on ${unchanged.map((r) => screenById(r.screenId)?.name).join(", ")}; those comments stay open.` : "",
+        failed.length ? `Couldn't finish ${failed.map((r) => screenById(r.screenId)?.name).join(", ")}: ${failed[0].error}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      logChat(list.length === 1 ? `Resolve the comment: “${list[0].body.slice(0, 120)}”` : `Resolve ${list.length} open comments`, summary, null);
+      say(done.length ? `Pip resolved ${done.length} of ${list.length}` : failed.length ? failed[0].error : "Pip didn't need to change anything", failed.length && !done.length ? "error" : done.length ? "success" : undefined);
+    } finally {
+      setWorking(false);
+    }
+  };
 
   const logChat = (userText, reply, focus) =>
     api.edit(
@@ -305,12 +460,16 @@ export function CanvasStudio() {
         return;
       } else if (e.key === "Escape") {
         setSelection(null);
+        setDraft(null);
+        if (tool === "comment") setTool("select");
       } else if (e.key.toLowerCase() === "p" && !present) {
         setPresent(selection?.screenId || project.screens[0]?.id);
       } else if (e.key.toLowerCase() === "v") {
         setTool("select");
       } else if (e.key.toLowerCase() === "h") {
         setTool("hand");
+      } else if (e.key.toLowerCase() === "c" && !meta) {
+        setTool("comment");
       } else if ((e.key === "Delete" || e.key === "Backspace") && selection?.info?.path && selectedScreen) {
         e.preventDefault();
         studio.commitScreen(selection.screenId, removeAt(selectedScreen.html, selection.info.path), "Deleted element");
@@ -374,6 +533,10 @@ export function CanvasStudio() {
               options={["desktop", "tablet", "mobile"].map((k) => ({ value: k, label: VIEWPORTS[k].label }))}
             />
           )}
+          <IconButton icon={Smartphone} label="Preview on your phone" title="Preview on your phone" onClick={() => setSharing("phone")} iconSize={16} />
+          <Button variant="secondary" size="sm" icon={Share2} aria-label="Share" onClick={() => setSharing("link")}>
+            <span className="hidden sm:inline">Share</span>
+          </Button>
           <Button variant="secondary" size="sm" icon={Play} className="ml-1" aria-label="Play" onClick={() => setPresent(selection?.screenId || project.screens[0]?.id)}>
             <span className="hidden sm:inline">Play</span>
           </Button>
@@ -474,7 +637,9 @@ export function CanvasStudio() {
                     height={heights[sc.id]}
                     zoom={view.z}
                     selected={selection?.screenId === sc.id}
-                    mode={tool === "select" ? "edit" : "view"}
+                    mode={tool === "hand" ? "view" : tool === "comment" ? "comment" : "edit"}
+                    pins={pinsFor[sc.id]}
+                    onPin={onPin}
                     streaming={studio.streams[sc.id] ?? null}
                     busy={studio.busy[sc.id]}
                     issues={(project.review?.audits?.[sc.id] || []).length}
@@ -492,6 +657,7 @@ export function CanvasStudio() {
             {[
               ["select", MousePointer2, "Select (V)"],
               ["hand", Hand, "Pan (H or hold Space)"],
+              ["comment", MessageSquarePlus, "Comment (C)"],
             ].map(([k, Icon, label]) => (
               <button key={k} onClick={() => setTool(k)} aria-label={label} title={label} className={cx("flex h-8 w-8 items-center justify-center rounded-full transition-colors", tool === k ? "bg-ink text-white" : "text-ink-2 hover:bg-sunken")}>
                 <Icon size={15} />
@@ -568,8 +734,15 @@ export function CanvasStudio() {
         <aside className="hidden w-[340px] shrink-0 flex-col border-l border-line bg-white lg:flex" aria-label="Inspector">
           <div className="flex shrink-0 border-b border-line px-2">
             {TABS.map(([k, label]) => (
-              <button key={k} onClick={() => setTab(k)} className={cx("relative px-2.5 py-3 text-[13px] font-semibold", tab === k ? "text-ink" : "text-faint hover:text-ink")}>
-                {label}
+              <button key={k} onClick={() => setTab(k)} aria-label={k === "comments" ? `Comments (${openComments.length} open)` : undefined} title={k === "comments" ? "Comments" : undefined} className={cx("relative px-2 py-3 text-[13px] font-semibold", tab === k ? "text-ink" : "text-faint hover:text-ink")}>
+                {k === "comments" ? (
+                  <span className="inline-flex items-center gap-1">
+                    <MessageSquarePlus size={14} />
+                    {openComments.length > 0 && <span className="rounded-full bg-accent px-1.5 text-[10px] leading-4 text-white">{openComments.length}</span>}
+                  </span>
+                ) : (
+                  label
+                )}
                 {tab === k && <motion.span layoutId="studio-tab" className="absolute inset-x-1.5 bottom-0 h-0.5 rounded-full bg-ink" />}
               </button>
             ))}
@@ -616,8 +789,21 @@ export function CanvasStudio() {
                 }}
               />
             )}
+            {tab === "comments" && (
+              <CommentsPanel
+                project={project}
+                state={commentState}
+                target={commentTarget}
+                focusId={focusComment}
+                onPost={postComment}
+                onCancelDraft={() => setDraft(null)}
+                onGo={goToComment}
+                onAskPip={askPipAboutComments}
+                onToast={say}
+              />
+            )}
             {tab === "history" && (
-              <HistoryPanel project={project} screen={selectedScreen} viewport={viewport} onRestore={(v) => restore(selectedScreen.id, v)} onCompare={(v) => setCompare({ screenId: selectedScreen.id, version: v })} />
+              <HistoryPanel project={project} loaded={!!s.loaded[project.id]} screen={selectedScreen} viewport={viewport} onRestore={(v) => restore(selectedScreen.id, v)} onCompare={(v) => setCompare({ screenId: selectedScreen.id, version: v })} />
             )}
           </div>
         </aside>
@@ -640,6 +826,7 @@ export function CanvasStudio() {
           />
         )}
         {compare && <Compare key="compare" project={project} screen={screenById(compare.screenId)} version={compare.version} viewport={viewport} onRestore={(v) => restore(compare.screenId, v)} onClose={() => setCompare(null)} />}
+        {sharing && <ShareDialog key="share" project={project} initial={sharing} flush={api.flush} toast={say} onClose={() => setSharing(null)} />}
         {exporting && <DesignExport key="export" project={project} screen={selectedScreen} onClose={() => setExporting(false)} toast={say} />}
       </AnimatePresence>
     </div>

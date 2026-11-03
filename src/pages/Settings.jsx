@@ -8,7 +8,8 @@ import { useStore } from "../store";
 import { Logo, PipGlyph } from "../brand";
 import { Button, Dialog, EASE, Segmented, Switch, cx } from "../ui";
 import { download } from "../util";
-import { useCredits } from "../credits";
+import { withRemoteVersions } from "../cloud";
+import { resetInLabel, resetTimeLabel, useCredits } from "../credits";
 import { removeAllArtwork } from "../ai/images";
 import { Avatar } from "./Avatar";
 import { UserMenu } from "./UserMenu";
@@ -366,7 +367,7 @@ function UsageSection() {
   const { runs, used, limit } = useCredits();
   const pct = Math.min(100, (used / limit) * 100);
   return (
-    <Panel id="usage" title="Usage" description="Credits reset every day at midnight UTC. Failed requests are free.">
+    <Panel id="usage" title="Usage" description={`Credits reset every day at ${resetTimeLabel()} your time (midnight UTC), next in ${resetInLabel()}. Failed requests are free.`}>
       <div className="flex items-end justify-between gap-4">
         <div>
           <div className="display text-[44px] leading-none tabular-nums">{runs ? limit - used : "…"}</div>
@@ -404,10 +405,24 @@ function DataSection() {
   const [busy, setBusy] = useState(false);
   const designs = s.data.projects.filter((p) => p.kind === "canvas");
 
-  const exportAll = () => {
-    const body = JSON.stringify({ app: "pipsqueak", version: 2, exportedAt: new Date().toISOString(), projects: designs }, null, 2);
-    download(new Blob([body], { type: "application/json" }), "pipsqueak-designs.json");
-    api.toast(`Exported ${designs.length} design${designs.length === 1 ? "" : "s"}`, { tone: "success" });
+  const exportAll = async () => {
+    setBusy(true);
+    try {
+      // Version history is stored apart from designs and only loaded for the
+      // ones opened this session; include all of it in the export.
+      await api.flush();
+      const { data: rows, error } = await supabase.from("projects").select("id, versions");
+      if (error) throw error;
+      const history = new Map(rows.map((r) => [r.id, r.versions || {}]));
+      const full = designs.map((p) => withRemoteVersions(p, history.get(p.id)));
+      const body = JSON.stringify({ app: "pipsqueak", version: 2, exportedAt: new Date().toISOString(), projects: full }, null, 2);
+      download(new Blob([body], { type: "application/json" }), "pipsqueak-designs.json");
+      api.toast(`Exported ${designs.length} design${designs.length === 1 ? "" : "s"}`, { tone: "success" });
+    } catch (err) {
+      api.toast(err.message || "Couldn't export. Try again.", { tone: "error" });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const importFile = async (f) => {
@@ -435,7 +450,7 @@ function DataSection() {
   return (
     <Panel id="data" title="Your data" description="Everything is saved to your account as you work.">
       <Row title="Export designs" description={`${designs.length} design${designs.length === 1 ? "" : "s"} as a JSON file you can import again.`}>
-        <Button variant="secondary" size="sm" icon={Download} onClick={exportAll} disabled={!designs.length}>
+        <Button variant="secondary" size="sm" icon={Download} onClick={exportAll} disabled={!designs.length || busy}>
           Export
         </Button>
       </Row>

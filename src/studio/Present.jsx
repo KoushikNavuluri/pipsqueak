@@ -6,17 +6,34 @@ import { VIEWPORTS } from "../design/engine.js";
 import { cx } from "../ui";
 
 // Full-screen clickable prototype. Taps on data-nav elements move between
-// screens; taps on unlinked buttons offer to design the screen they'd open.
-export function Present({ project, startId, onClose, onDesignNext }) {
+// screens; taps on unlinked buttons offer to design the screen they'd open
+// (in the studio, where onDesignNext is given).
+//
+// Also used for share links: `fullBleed` fills a phone's screen edge to edge
+// with no device frame, `commenting` lets the viewer pick an element instead
+// of tapping through (reported with onElement), `highlight` outlines one, and
+// `actions`/`overlay` add the page's own controls.
+export function Present({ project, startId, onClose, onDesignNext, fullBleed = false, commenting = false, onElement, onScreen, highlight, navigateTo, initialDevice, actions, overlay }) {
   const screens = project.screens.filter((s) => s.html);
   const [current, setCurrent] = useState(startId && screens.some((s) => s.id === startId) ? startId : screens[0]?.id);
+  // A live update can remove the screen being shown.
+  useEffect(() => {
+    if (screens.length && !screens.some((s) => s.id === current)) setCurrent(screens[0].id);
+  }, [screens.map((s) => s.id).join("|")]);
+  useEffect(() => {
+    onScreen?.(current);
+  }, [current]);
+  // Lets the page jump to a screen, e.g. to show where a comment is.
+  useEffect(() => {
+    if (navigateTo?.id && navigateTo.id !== current) go(navigateTo.id);
+  }, [navigateTo]);
   const [stack, setStack] = useState([]);
   const [dir, setDir] = useState(1);
   const [hints, setHints] = useState(false);
   const [unlinked, setUnlinked] = useState(null);
   const frame = useRef(null);
   const platform = project.spec?.platform || "mobile";
-  const [device, setDevice] = useState(platform === "mobile" ? "mobile" : "desktop");
+  const [device, setDevice] = useState(initialDevice || (platform === "mobile" ? "mobile" : "desktop"));
   const vp = VIEWPORTS[device];
   const [box, setBox] = useState({ w: window.innerWidth, h: window.innerHeight });
   useEffect(() => {
@@ -42,7 +59,7 @@ export function Present({ project, startId, onClose, onDesignNext }) {
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onClose?.();
       else if (e.key === "ArrowRight") go(screens[Math.min(screens.length - 1, index + 1)]?.id);
       else if (e.key === "ArrowLeft") go(screens[Math.max(0, index - 1)]?.id, true);
       else if (e.key.toLowerCase() === "h") setHints((h) => !h);
@@ -54,10 +71,16 @@ export function Present({ project, startId, onClose, onDesignNext }) {
   useEffect(() => {
     frame.current?.post({ type: "hints", on: hints });
   }, [hints, current]);
+  useEffect(() => {
+    frame.current?.post({ type: "select", path: highlight?.screenId === current ? highlight.path || null : null, scroll: true });
+  }, [highlight?.screenId, highlight?.path?.join("."), current]);
 
   const onMessage = (m) => {
     if (m.type === "ready") {
       frame.current?.post({ type: "hints", on: hints });
+      if (highlight?.screenId === current && highlight.path) frame.current?.post({ type: "select", path: highlight.path, scroll: true });
+    } else if (m.type === "select") {
+      onElement?.(current, m.path ? m : null);
     } else if (m.type === "navigate") {
       if (!go(m.to)) {
         setUnlinked({ text: m.to, missing: true });
@@ -65,17 +88,54 @@ export function Present({ project, startId, onClose, onDesignNext }) {
     } else if (m.type === "tap") {
       setUnlinked({ text: m.text });
     } else if (m.type === "key" && m.key === "Escape") {
-      onClose();
+      onClose?.();
     }
   };
+  const mode = commenting ? "comment" : "play";
+
+  if (fullBleed) {
+    // A real phone: the screen at the phone's own width, nothing around it.
+    const s = box.w / vp.w;
+    return (
+      <div className="fixed inset-0 overflow-hidden" style={{ background: project.system.colors.bg }} role="dialog" aria-label="Prototype">
+        <div style={{ width: vp.w, height: box.h / s, transform: `scale(${s})`, transformOrigin: "0 0" }}>
+          <AnimatePresence initial={false} custom={dir} mode="popLayout">
+            <motion.div
+              key={current}
+              custom={dir}
+              initial={{ x: dir > 0 ? "100%" : "-30%", opacity: dir > 0 ? 1 : 0.6 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: dir > 0 ? "-30%" : "100%", opacity: dir > 0 ? 0.6 : 1 }}
+              transition={{ type: "spring", stiffness: 380, damping: 40 }}
+              className="absolute inset-0"
+            >
+              {screen && <Frame ref={frame} id={"play-" + screen.id} html={screen.html} system={project.system} kit={project.kit} mode={mode} width={vp.w} height={box.h / s} onMessage={onMessage} />}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+        {stack.length > 0 && !commenting && (
+          <button
+            onClick={() => go(stack[stack.length - 1], true)}
+            aria-label="Back"
+            className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] left-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur"
+          >
+            <ArrowLeft size={18} />
+          </button>
+        )}
+        {overlay}
+      </div>
+    );
+  }
 
   const mobile = device === "mobile";
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[80] flex flex-col bg-night text-white" role="dialog" aria-label="Prototype">
       <div className="flex h-14 shrink-0 items-center gap-3 px-4">
-        <button onClick={onClose} aria-label="Close prototype" className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10">
-          <X size={18} />
-        </button>
+        {onClose && (
+          <button onClick={onClose} aria-label="Close prototype" className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10">
+            <X size={18} />
+          </button>
+        )}
         <div className="min-w-0 text-sm">
           <span className="font-semibold">{project.name}</span>
           <span className="text-white/50"> · {screen?.name}</span>
@@ -89,6 +149,7 @@ export function Present({ project, startId, onClose, onDesignNext }) {
           <button onClick={() => setHints((h) => !h)} className={cx("inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm", hints ? "bg-white text-night" : "hover:bg-white/10")}>
             {hints ? <EyeOff size={15} /> : <Eye size={15} />} Hotspots
           </button>
+          {actions}
           {platform !== "mobile" && (
             <div className="flex rounded-lg bg-white/10 p-0.5">
               {["desktop", "tablet", "mobile"].map((d) => (
@@ -124,7 +185,7 @@ export function Present({ project, startId, onClose, onDesignNext }) {
                   className="absolute inset-x-0 bottom-0"
                   style={{ top: mobile ? 47 : 0 }}
                 >
-                  {screen && <Frame ref={frame} id={"play-" + screen.id} html={screen.html} system={project.system} kit={project.kit} mode="play" width={vp.w} height={vp.h} onMessage={onMessage} />}
+                  {screen && <Frame ref={frame} id={"play-" + screen.id} html={screen.html} system={project.system} kit={project.kit} mode={mode} width={vp.w} height={vp.h} onMessage={onMessage} />}
                 </motion.div>
               </AnimatePresence>
               {mobile && <div className="pointer-events-none absolute bottom-2 left-1/2 z-10 h-[5px] w-[134px] -translate-x-1/2 rounded-full" style={{ background: project.system.colors.ink, opacity: 0.4 }} />}
@@ -137,15 +198,17 @@ export function Present({ project, startId, onClose, onDesignNext }) {
               <span>
                 {unlinked.missing ? "That screen doesn't exist yet." : <>“{unlinked.text || "That"}” isn't linked to a screen.</>}
               </span>
-              <button
-                onClick={() => {
-                  onDesignNext(current, unlinked.text);
-                  setUnlinked(null);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white"
-              >
-                <Sparkles size={13} /> Design what it opens
-              </button>
+              {onDesignNext && (
+                <button
+                  onClick={() => {
+                    onDesignNext(current, unlinked.text);
+                    setUnlinked(null);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white"
+                >
+                  <Sparkles size={13} /> Design what it opens
+                </button>
+              )}
               <button onClick={() => setUnlinked(null)} aria-label="Dismiss" className="text-mute">
                 <X size={14} />
               </button>
@@ -157,8 +220,9 @@ export function Present({ project, startId, onClose, onDesignNext }) {
         {screens.map((s) => (
           <button key={s.id} onClick={() => go(s.id, screens.findIndex((x) => x.id === s.id) < index)} aria-label={s.name} className={cx("h-1.5 rounded-full transition-all", s.id === current ? "w-6 bg-white" : "w-1.5 bg-white/30 hover:bg-white/60")} />
         ))}
-        <span className="ml-3">Tap to navigate · ← → · H for hotspots</span>
+        <span className="ml-3">{commenting ? "Click any element to comment on it" : "Tap to navigate · ← → · H for hotspots"}</span>
       </div>
+      {overlay}
     </motion.div>
   );
 }

@@ -261,7 +261,15 @@ Deno.serve(async (req) => {
     if (action === "image") {
       const result = await paint(body);
       await finish("ok", { model: result.model, input_tokens: result.usage.input, output_tokens: result.usage.output });
-      return json(200, { image: result.data, quota });
+      // A one-time upload slot in the user's artwork folder for this image.
+      // The browser shrinks the image and uploads it there; it can't write to
+      // the public bucket any other way, so every stored image was painted here.
+      const folder = /^[A-Za-z0-9_-]{1,64}$/.test(String(body.projectId ?? "")) ? String(body.projectId) : "misc";
+      const { data: slot, error: slotError } = await admin.storage
+        .from("artwork")
+        .createSignedUploadUrl(`${user.id}/${folder}/kit-${crypto.randomUUID()}.webp`);
+      if (slotError) console.error("Couldn't create an upload slot", slotError.message);
+      return json(200, { image: result.data, quota, upload: slot ? { path: slot.path, token: slot.token } : null });
     }
 
     if (DESIGN_JSON[action]) {

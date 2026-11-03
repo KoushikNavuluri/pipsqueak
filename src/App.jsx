@@ -28,6 +28,7 @@ const ResetPassword = lazy(() => load.auth().then((m) => ({ default: m.ResetPass
 const Dashboard = lazy(() => load.dashboard().then((m) => ({ default: m.Dashboard })));
 const Settings = lazy(() => load.settings().then((m) => ({ default: m.Settings })));
 const NotFound = lazy(() => import("./pages/NotFound").then((m) => ({ default: m.NotFound })));
+const SharedView = lazy(() => import("./pages/SharedView").then((m) => ({ default: m.SharedView })));
 const CanvasStudio = lazy(() => load.studio().then((m) => ({ default: m.CanvasStudio })));
 const CreateFlow = lazy(() => load.create().then((m) => ({ default: m.CreateFlow })));
 
@@ -127,6 +128,7 @@ export function App() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
             </Route>
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/s/:token" element={<SharedView />} />
             <Route path="/app" element={<RequireAuth />}>
               <Route element={<AppData />}>
                 <Route index element={<Shell />} />

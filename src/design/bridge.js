@@ -43,6 +43,10 @@ function bridgeMain() {
     setTimeout(reportCss, 1500);
   }
   if (twReady) watchCss();
+  // "comment" picks elements like "edit" but never edits text in place.
+  function picking() {
+    return mode === "edit" || mode === "comment";
+  }
   function ours(el) {
     return el && el.closest && el.closest("[data-pq-ui]");
   }
@@ -98,6 +102,35 @@ function bridgeMain() {
     }
     return true;
   }
+  function norm(t) {
+    return (t || "").replace(/\s+/g, " ").trim().slice(0, 40);
+  }
+  function textOf(el) {
+    return el.innerText != null ? el.innerText : el.textContent;
+  }
+  function docRect(el) {
+    var r = el.getBoundingClientRect();
+    return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height };
+  }
+  // Finds a commented element again after the screen changed: by path when it
+  // still holds the same element, else by tag and text.
+  function locate(a) {
+    if (!a) return null;
+    var want = norm(a.text);
+    var el = byPath(a.path);
+    if (el && a.tag && el.tagName.toLowerCase() !== a.tag) el = null;
+    if (el && want && norm(textOf(el)) !== want) el = null;
+    if (!el && a.tag && want) {
+      var all = document.body.querySelectorAll(a.tag);
+      for (var i = 0; i < all.length; i++) {
+        if (!ours(all[i]) && norm(textOf(all[i])) === want) {
+          el = all[i];
+          break;
+        }
+      }
+    }
+    return el ? { path: pathOf(el), rect: docRect(el) } : null;
+  }
   function describe(el) {
     var r = el.getBoundingClientRect();
     var cs = getComputedStyle(el);
@@ -107,6 +140,7 @@ function bridgeMain() {
       text: (el.innerText || "").trim().slice(0, 240),
       className: el.getAttribute("class") || "",
       rect: { x: r.left, y: r.top, w: r.width, h: r.height },
+      doc: docRect(el),
       outer: el.outerHTML.slice(0, 8000),
       editable: isTextLeaf(el),
       style: { color: cs.color, background: cs.backgroundColor, fontSize: cs.fontSize, fontWeight: cs.fontWeight, fontFamily: cs.fontFamily.split(",")[0].replace(/"/g, "") },
@@ -303,7 +337,7 @@ function bridgeMain() {
     }
   }
   document.addEventListener("mouseover", function (e) {
-    if (mode !== "edit" || editing) return;
+    if (!picking() || editing) return;
     var t = e.target;
     if (ours(t) || t === document.body || t === document.documentElement) return place(hoverBox, null);
     place(hoverBox, t);
@@ -312,7 +346,7 @@ function bridgeMain() {
     place(hoverBox, null);
   });
   document.addEventListener("click", function (e) {
-    if (mode === "edit") {
+    if (picking()) {
       if (editing && editing.contains(e.target)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -365,7 +399,7 @@ function bridgeMain() {
     var m = e.data;
     if (m.type === "mode") {
       mode = m.mode;
-      if (mode !== "edit") {
+      if (!picking()) {
         place(hoverBox, null);
         select(null);
       }
@@ -389,6 +423,10 @@ function bridgeMain() {
       }
     } else if (m.type === "vars") {
       for (var k in m.vars) document.documentElement.style.setProperty(k, m.vars[k]);
+    } else if (m.type === "locate") {
+      var found = [];
+      for (var a = 0; a < (m.anchors || []).length; a++) found.push(locate(m.anchors[a]));
+      send("locate", { id: m.id, found: found });
     } else if (m.type === "audit") {
       send("audit", { id: m.id, result: audit() });
     } else if (m.type === "html") {

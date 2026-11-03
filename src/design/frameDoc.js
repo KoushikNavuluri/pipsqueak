@@ -157,7 +157,7 @@ const pinViewport = (vh) =>
 // Reports the CSS Tailwind compiled for this document to the app (see cssCache.js).
 const CAPTURE = `<script>(function(){var t;function c(){var l=document.head.querySelectorAll("style:not([id]):not([type])"),s=l[l.length-1];if(s&&s.textContent.length>200)parent.postMessage({__pq:1,type:"css",css:s.textContent},"*")}new MutationObserver(function(){clearTimeout(t);t=setTimeout(c,400)}).observe(document.head,{childList:true,subtree:true,characterData:true});setTimeout(c,1500)})()</script>`;
 
-// mode: "edit" | "view" | "play" (with the bridge), "thumb" (static preview
+// mode: "edit" | "comment" | "view" | "play" (with the bridge), "thumb" (static preview
 // that reports its compiled CSS) or "export" (no scripts). With `css`, the
 // compiled stylesheet is inlined and Tailwind's compiler isn't loaded; editor
 // frames load it on demand when an edit needs classes the CSS doesn't have.
@@ -172,7 +172,7 @@ export function buildFrameDoc({ html, system, kit = [], mode = "view", frameId =
   const iconLink = iconsUrl(iconSet, iconNames(html));
   const vars = { ...systemVars(system), "--pq-icon-family": `"${ICON_FAMILIES[iconSet] || ICON_FAMILIES.rounded}"` };
   const body = resolveImages(html, system, kit);
-  const lazyTw = css && (mode === "edit" || mode === "view") ? { src: TAILWIND, theme: THEME } : undefined;
+  const lazyTw = css && (mode === "edit" || mode === "view" || mode === "comment") ? { src: TAILWIND, theme: THEME } : undefined;
   const bridge =
     mode === "export" ? "" : mode === "thumb" ? (css ? "" : CAPTURE) : `<script>window.__PQ=${JSON.stringify({ frameId, mode, canvas, tw: lazyTw })};${BRIDGE}</script>`;
   const styles = css ? `<style id="pq-css">${css}</style>` : `<script src="${TAILWIND}"></script>\n<style type="text/tailwindcss">${THEME}</style>`;

@@ -15,6 +15,7 @@ import { supabase } from "./supabase";
 import { prefetchCloud, takeCloud } from "./cloud";
 import { StoreProvider, cleanData, emptyData, useStore } from "./store";
 import { BurstLayer, Button, Toasts } from "./ui";
+import { ConflictBar } from "./ConflictBar";
 import { Mark, PipLoader } from "./brand";
 
 const SessionContext = createContext(null);
@@ -204,18 +205,18 @@ export function AppData() {
     let live = true;
     setError(null);
     takeCloud(user.id)
-      .then(({ projects, settings }) => {
+      .then(({ projects, settings, revs, legacy }) => {
         if (!live) {
           return;
         }
         if (projects.length === 0 && !settings) {
           // First sign-in: an empty workspace, saved on the first change.
-          setCloud({ data: emptyData(), saved: null });
+          setCloud({ data: emptyData(), saved: null, revs: {}, legacy: [] });
         } else {
           const saved = { projects, activeId: settings?.active_project_id ?? null, prefs: settings?.prefs ?? {} };
           // Anything cleaned up on load (old sample projects) is removed from
           // the cloud by the first save.
-          setCloud({ data: cleanData(saved), saved });
+          setCloud({ data: cleanData(saved), saved, revs, legacy });
         }
       })
       .catch((err) => {
@@ -255,6 +256,7 @@ export function AppData() {
         <Outlet />
       </CalmMotion>
       <Toasts />
+      <ConflictBar />
       <BurstLayer />
     </StoreProvider>
   );

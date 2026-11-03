@@ -56,7 +56,7 @@ const ACTIONS = [
 // Memoized: the studio re-renders often (zoom readout, heights, panels), and
 // a card only needs to when its own props change.
 export const ScreenCard = memo(forwardRef(function ScreenCard(
-  { project, screen, viewport, height, zoom, selected, mode, streaming, busy, issues, deferred, onSelect, onMessage, onAction, onRename },
+  { project, screen, viewport, height, zoom, selected, mode, streaming, busy, issues, deferred, pins, onPin, onSelect, onMessage, onAction, onRename },
   ref,
 ) {
   const { system, kit = [] } = project;
@@ -141,6 +141,29 @@ export const ScreenCard = memo(forwardRef(function ScreenCard(
           ) : (
             <div className="skel h-full w-full" />
           )}
+          {/* Comment pins at the top-right corner of their element; constant on-screen size. */}
+          {pins?.map((pin) => (
+            <button
+              key={pin.id}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => onPin?.(pin.id)}
+              aria-label={`Comment ${pin.n}`}
+              title={pin.title}
+              className={cx(
+                "absolute z-10 flex h-6 min-w-6 items-center justify-center rounded-full rounded-bl-none px-1.5 text-[11px] font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,.25)] ring-2 ring-white transition-transform",
+                pin.focus ? "bg-ink" : "bg-accent hover:scale-110",
+                pin.lost && "opacity-60",
+              )}
+              style={{
+                left: Math.max(4, Math.min(viewport.w - 28, pin.x)),
+                top: Math.max(4, pin.y),
+                transform: `translate(-30%, -70%) scale(${inverse})`,
+                transformOrigin: "bottom left",
+              }}
+            >
+              {pin.n}
+            </button>
+          ))}
           {busy && (
             <div className="pointer-events-none absolute inset-x-0 top-0 h-1 overflow-hidden">
               <div className="h-full w-1/3 bg-accent" style={{ animation: "pqbar 1.3s ease-in-out infinite" }} />

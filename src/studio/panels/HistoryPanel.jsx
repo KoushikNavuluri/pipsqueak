@@ -21,7 +21,7 @@ function Thumb({ html, project, viewport }) {
   );
 }
 
-export function HistoryPanel({ project, screen, viewport, onRestore, onCompare }) {
+export function HistoryPanel({ project, loaded = true, screen, viewport, onRestore, onCompare }) {
   if (!screen) {
     return <div className="p-6 text-center text-sm text-mute">Select a screen to see its history.</div>;
   }
@@ -39,8 +39,9 @@ export function HistoryPanel({ project, screen, viewport, onRestore, onCompare }
           <div className="text-xs text-mute">{screen.changedAt ? ago(screen.changedAt) : ""}</div>
         </div>
       </div>
+      {!loaded && <p className="mt-3 text-xs text-mute">Loading earlier versions…</p>}
       {versions.length === 0 ? (
-        <p className="mt-4 text-sm text-mute">Every change you or Pip make is saved here, so you can always go back.</p>
+        loaded && <p className="mt-4 text-sm text-mute">Every change you or Pip make is saved here, so you can always go back.</p>
       ) : (
         <ul className="mt-3 grid gap-2">
           {versions.map((v, i) => (

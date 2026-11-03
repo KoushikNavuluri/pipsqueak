@@ -6,7 +6,8 @@ import { useStore } from "../store";
 import { displayName, useSession } from "../session";
 import { Aura, Logo, PipGlyph } from "../brand";
 import { Button, EASE, IconButton, Menu, Segmented, cx, fireBurst } from "../ui";
-import { PLATFORM_LABEL, ago } from "../util";
+import { PLATFORM_LABEL, ago, uid } from "../util";
+import { getShared, remixFromShare } from "../share";
 import { useCredits } from "../credits";
 import { toAttachment } from "../ai/images";
 import { BriefPanel, briefOf } from "../ai/BriefPanel";
@@ -386,6 +387,25 @@ export function Dashboard() {
       .filter((p) => (!starred || p.fav) && (!q || `${p.name} ${p.prompt} ${p.tagline || ""}`.toLowerCase().includes(q)))
       .sort((a, b) => b.created - a.created);
   }, [canvas, query, starred]);
+
+  // /app?remix=<token>: a design someone shared with remixing allowed.
+  const [params, setParams] = useSearchParams();
+  const remixing = useRef(false);
+  useEffect(() => {
+    const token = params.get("remix");
+    if (!token || remixing.current) return;
+    remixing.current = true;
+    setParams({}, { replace: true });
+    getShared(token)
+      .then((shared) => {
+        if (!shared?.allowRemix || !shared.project?.screens) throw new Error("That link doesn't allow remixing, or it's no longer active.");
+        const project = remixFromShare(shared, uid());
+        api.add(project);
+        api.toast(`${project.name} is yours to edit`, { tone: "success" });
+        fireBurst();
+      })
+      .catch((err) => api.toast(err.message || "Couldn't remix that design.", { tone: "error" }));
+  }, [params]);
 
   const remix = async (item) => {
     try {

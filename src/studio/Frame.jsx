@@ -102,11 +102,11 @@ export const Frame = forwardRef(function Frame(
     return () => window.removeEventListener("message", onMsg);
   });
 
-  const request = (type, timeout = 4000) =>
+  const request = (type, timeout = 4000, payload = {}) =>
     new Promise((resolve) => {
       const reqId = Math.random().toString(36).slice(2);
       waiters.current.set(reqId, resolve);
-      post({ type, id: reqId });
+      post({ ...payload, type, id: reqId });
       setTimeout(() => {
         if (waiters.current.has(reqId)) {
           waiters.current.delete(reqId);
@@ -122,6 +122,8 @@ export const Frame = forwardRef(function Frame(
     expect: (next) => expected.current.add(next),
     audit: async () => (await request("audit"))?.result || null,
     getHtml: async () => (await request("html"))?.html || null,
+    // Where commented elements are now: [{ path, rect } | null] per anchor.
+    locate: async (anchors) => (await request("locate", 3000, { anchors }))?.found || null,
   }));
 
   return (

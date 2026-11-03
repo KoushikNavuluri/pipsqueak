@@ -1,4 +1,5 @@
 import { SUPABASE_KEY, SUPABASE_URL, supabase } from "../supabase";
+import { resetInLabel, resetTimeLabel } from "../credits";
 
 const ENDPOINT = `${SUPABASE_URL}/functions/v1/ai`;
 
@@ -43,8 +44,13 @@ async function post(body, signal) {
     try {
       payload = await res.json();
     } catch {}
+    let message = payload.error || `Something went wrong (${res.status}). Try again.`;
+    if (res.status === 429) {
+      // The server speaks UTC; say it on the user's clock.
+      message = message.replace(/They reset at midnight UTC\.?/, `They reset at ${resetTimeLabel()} your time, in ${resetInLabel()}.`);
+    }
     throw new AiError(
-      payload.error || `Something went wrong (${res.status}). Try again.`,
+      message,
       {
         status: res.status,
         quota: payload.quota ?? null,
