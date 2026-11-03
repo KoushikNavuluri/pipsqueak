@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy, ExternalLink, Link2, LoaderCircle, RefreshCw, Smartphone } from "lucide-react";
 import { Button, Dialog, Segmented, Switch } from "../ui";
 import { DEVICE_LINK_HOURS, createShare, deleteShare, deviceShare, getShare, rotateShare, shareUrl, updateShare } from "../share";
@@ -39,6 +39,7 @@ function Option({ title, description, on, onChange, disabled }) {
 function LinkPanel({ project, flush, toast }) {
   const [share, setShare] = useState(undefined);
   const [busy, setBusy] = useState(false);
+  const latest = useRef(0);
   useEffect(() => {
     getShare(project.id, "link")
       .then(setShare)
@@ -80,7 +81,18 @@ function LinkPanel({ project, flush, toast }) {
     );
   }
   const url = shareUrl(share.token);
-  const set = (patch) => run(async () => setShare(await updateShare(share.token, patch)));
+  // Shows the change at once; a slower earlier reply can't undo a later one.
+  const set = (patch) => {
+    const seq = ++latest.current;
+    setShare((sh) => ({ ...sh, ...patch }));
+    run(async () => {
+      const saved = await updateShare(share.token, patch).catch((err) => {
+        if (seq === latest.current) setShare((sh) => ({ ...sh, ...Object.fromEntries(Object.keys(patch).map((k) => [k, !patch[k]])) }));
+        throw err;
+      });
+      if (seq === latest.current) setShare(saved);
+    });
+  };
   return (
     <div>
       <p className="mb-3 text-sm text-mute">Anyone with this link can tap through every screen. It shows your latest changes.</p>
@@ -90,14 +102,12 @@ function LinkPanel({ project, flush, toast }) {
           title="Viewers can comment"
           description="People with the link can pin comments to any element. They show up in your Comments tab."
           on={share.allow_comments}
-          disabled={busy}
           onChange={(v) => set({ allow_comments: v })}
         />
         <Option
           title="Signed-in viewers can remix"
           description="They get their own copy to edit, without your chat, review or history. Your design doesn't change."
           on={share.allow_remix}
-          disabled={busy}
           onChange={(v) => set({ allow_remix: v })}
         />
       </div>

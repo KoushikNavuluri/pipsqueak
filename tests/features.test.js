@@ -3,6 +3,7 @@ import { anchorFrom, anchorLabel, remixFromShare } from "../src/share.js";
 import { commentsInstruction } from "../src/studio/panels/CommentsPanel.jsx";
 import { nextReset, resetInLabel } from "../src/credits.js";
 import { contrast, normalizeSystem } from "../src/design/system.js";
+import { findAnchor, looksTruncated } from "../src/design/htmlTools.js";
 import { htmlPrototype, reactProject } from "../src/design/exportDesign.js";
 
 describe("comment anchors", () => {
@@ -34,8 +35,11 @@ describe("comment anchors", () => {
       "Home",
     );
     expect(text).toContain("Home screen");
-    expect(text).toContain("1. On the <button> “Go”: Make it bigger");
-    expect(text).toContain("2. On the screen as a whole: Warmer colours");
+    expect(text).toContain("1. About the button that read “Go”: Make it bigger");
+    expect(text).toContain("2. About the screen as a whole: Warmer colours");
+    expect(text).toContain("Return the complete screen.");
+    // No element markup: it led the model to answer with that element alone.
+    expect(text).not.toMatch(/<button/);
   });
 });
 
@@ -96,5 +100,25 @@ describe("exports", () => {
   it("escape the title in the React project", () => {
     const html = reactProject({ ...evil, screens: [] })["index.html"];
     expect(html).toContain("<title>&lt;img src=x onerror=alert(1)&gt;</title>");
+  });
+});
+
+describe("Pip edits for comments", () => {
+  const page = `<header><h1 class="uppercase">Welcome</h1></header><main>${"<p>Line</p>".repeat(30)}<button>Get started</button></main>`;
+
+  it("refuses a whole-screen rewrite that kept only one element", () => {
+    expect(looksTruncated(page, '<h1 class="text-5xl">Welcome</h1>')).toBe(true);
+    expect(looksTruncated(page, page.replace("Welcome", "Hello"))).toBe(false);
+    expect(looksTruncated("<p>tiny</p>", "<p>x</p>")).toBe(false);
+  });
+
+  it("finds a commented element by path, or by tag and text after the screen changed", () => {
+    expect(findAnchor(page, { path: [1, 30], tag: "button", text: "Get started" })).toEqual([1, 30]);
+    const moved = page.replace("<main>", "<main><p>New banner</p>");
+    expect(findAnchor(moved, { path: [1, 30], tag: "button", text: "Get started" })).toEqual([1, 31]);
+    // Text captured from the screen can be upper-cased by CSS.
+    expect(findAnchor(page, { path: [0, 0], tag: "h1", text: "WELCOME" })).toEqual([0, 0]);
+    expect(findAnchor(page, { path: [0, 0], tag: "h2", text: "Gone" })).toBe(null);
+    expect(findAnchor(page, {})).toBe(null);
   });
 });

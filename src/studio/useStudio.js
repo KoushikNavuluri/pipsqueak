@@ -3,7 +3,7 @@ import { useStore } from "../store";
 import { useSession } from "../session";
 import { uid } from "../util";
 import { applyShell, copilotPlan, critique, editScreen, extractShell, matchTheApp, paintKitImage, writeScreen } from "../design/engine.js";
-import { elementAt, replaceAt } from "../design/htmlTools.js";
+import { elementAt, findAnchor, looksTruncated, replaceAt } from "../design/htmlTools.js";
 import { patchSystem } from "../design/system.js";
 import { PATTERNS } from "../design/patterns.js";
 
@@ -234,6 +234,9 @@ export function useStudio(project) {
           signal: ctrl.signal,
           onHtml: path ? null : (h) => setStream(screenId, h),
         });
+        if (!selected && looksTruncated(screen.html, out)) {
+          throw new Error("Pip's answer came back incomplete, so nothing was changed. Try again.");
+        }
         let next = selected ? replaceAt(screen.html, path, out) : out;
         if (p.shell) {
           next = applyShell(next, p.shell, screenId);
@@ -245,6 +248,56 @@ export function useStudio(project) {
         return { changed: true };
       } finally {
         clearStream(screenId);
+        setBusyFor(screenId, null);
+      }
+    },
+    [commitScreen, quality],
+  );
+
+  // Addresses comments on one screen: each comment pinned to an element is an
+  // edit of just that element (found again by tag and text if the screen
+  // changed), and comments on the whole screen, or whose element is gone,
+  // become one edit of the screen. Everything lands as one version.
+  // Resolves to { done: [comments handled] }.
+  const resolveComments = useCallback(
+    async (screenId, list, wholeInstruction) => {
+      const p = projRef.current;
+      const screen = p.screens.find((x) => x.id === screenId);
+      if (!screen?.html || !list.length) return { done: [] };
+      const ctrl = new AbortController();
+      aborts.current.set(screenId, ctrl);
+      setBusyFor(screenId, "Resolving comments");
+      const base = { spec: specOf(p), system: p.system, screen, references: siblings(p, screenId), quality, signal: ctrl.signal };
+      let html = screen.html;
+      const done = [];
+      const whole = [];
+      try {
+        for (const c of list) {
+          const path = c.anchor?.tag ? findAnchor(html, c.anchor) : null;
+          if (!path) {
+            whole.push(c);
+            continue;
+          }
+          const { html: out } = await editScreen({ ...base, html, selected: elementAt(html, path), instruction: c.body });
+          const next = out.trim() ? replaceAt(html, path, out) : html;
+          if (squash(next) !== squash(html)) {
+            html = next;
+            done.push(c);
+          }
+        }
+        if (whole.length) {
+          const { html: out } = await editScreen({ ...base, html, selected: null, instruction: wholeInstruction(whole) });
+          if (out.trim() && !looksTruncated(html, out) && squash(out) !== squash(html)) {
+            html = out;
+            done.push(...whole);
+          }
+        }
+        if (done.length) {
+          if (p.shell) html = applyShell(html, p.shell, screenId);
+          commitScreen(screenId, html, `Resolved ${done.length} comment${done.length === 1 ? "" : "s"}`);
+        }
+        return { done };
+      } finally {
         setBusyFor(screenId, null);
       }
     },
@@ -349,5 +402,5 @@ export function useStudio(project) {
 
   const regenerate = useCallback((screenId, note) => generate(screenId, { instruction: note || "A fresh take on this screen: same job and content, a different composition.", ownLook: !!note, label: note ? `Regenerated: ${note.slice(0, 40)}` : "Regenerated" }), [generate]);
 
-  return { quality, streams, busy, frames, commitScreen, generate, regenerate, aiEdit, runCopilot, runReview, edit };
+  return { quality, streams, busy, frames, commitScreen, generate, regenerate, aiEdit, resolveComments, runCopilot, runReview, edit };
 }

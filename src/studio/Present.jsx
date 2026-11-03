@@ -95,10 +95,12 @@ export function Present({ project, startId, onClose, onDesignNext, fullBleed = f
 
   if (fullBleed) {
     // A real phone: the screen at the phone's own width, nothing around it.
-    const s = box.w / vp.w;
+    // Web designs use their phone layout here, whatever was picked before.
+    const fvp = VIEWPORTS[initialDevice || device];
+    const s = box.w / fvp.w;
     return (
       <div className="fixed inset-0 overflow-hidden" style={{ background: project.system.colors.bg }} role="dialog" aria-label="Prototype">
-        <div style={{ width: vp.w, height: box.h / s, transform: `scale(${s})`, transformOrigin: "0 0" }}>
+        <div style={{ width: fvp.w, height: box.h / s, transform: `scale(${s})`, transformOrigin: "0 0" }}>
           <AnimatePresence initial={false} custom={dir} mode="popLayout">
             <motion.div
               key={current}
@@ -109,7 +111,7 @@ export function Present({ project, startId, onClose, onDesignNext, fullBleed = f
               transition={{ type: "spring", stiffness: 380, damping: 40 }}
               className="absolute inset-0"
             >
-              {screen && <Frame ref={frame} id={"play-" + screen.id} html={screen.html} system={project.system} kit={project.kit} mode={mode} width={vp.w} height={box.h / s} onMessage={onMessage} />}
+              {screen && <Frame ref={frame} id={"play-" + screen.id} html={screen.html} system={project.system} kit={project.kit} mode={mode} width={fvp.w} height={box.h / s} onMessage={onMessage} />}
             </motion.div>
           </AnimatePresence>
         </div>

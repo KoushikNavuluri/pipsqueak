@@ -30,22 +30,27 @@ export function useComments(projectId, onError) {
     const stop = watchComments(projectId, reload);
     const onFocus = () => reload();
     addEventListener("focus", onFocus);
+    // Also check now and then, for networks that block live updates.
+    const poll = setInterval(() => document.visibilityState === "visible" && reload(), 30000);
     return () => {
       stop();
       removeEventListener("focus", onFocus);
+      clearInterval(poll);
     };
   }, [projectId, reload]);
   return { comments: comments || [], loading: comments === null, reload, setComments };
 }
 
-// The instruction Pip gets for one screen's open comments.
+// The instruction Pip gets for comments that apply to a whole screen (or
+// whose element is gone). Comments on an element are sent as edits of that
+// element instead.
 export function commentsInstruction(list, screenName) {
   const lines = list.map((c, i) => {
     const a = c.anchor || {};
-    const where = a.tag ? `On the <${a.tag}>${a.text ? ` “${a.text.replace(/\s+/g, " ").trim().slice(0, 80)}”` : ""}${a.outer ? ` (currently: ${a.outer.replace(/\s+/g, " ").slice(0, 300)})` : ""}` : "On the screen as a whole";
+    const where = a.tag ? `About the ${a.tag}${a.text ? ` that read “${a.text.replace(/\s+/g, " ").trim().slice(0, 80)}”` : ""}` : "About the screen as a whole";
     return `${i + 1}. ${where}: ${c.body.replace(/\s+/g, " ").trim()}`;
   });
-  return `Resolve these review comments on the ${screenName} screen. Make the change each comment asks for, keep everything else as it is, and stay within the design system.\n${lines.join("\n")}`;
+  return `Resolve these review comments on the ${screenName} screen. Make the change each comment asks for, keep everything else on the screen as it is, and stay within the design system. Return the complete screen.\n${lines.join("\n")}`;
 }
 
 function Composer({ target, onPost, onCancel }) {

@@ -56,6 +56,39 @@ export function elementAt(html, path) {
   return el && el !== doc.body ? el.outerHTML : null;
 }
 
+const normText = (t) => String(t || "").replace(/\s+/g, " ").trim().slice(0, 40).toLowerCase();
+const pathTo = (body, el) => {
+  const p = [];
+  while (el && el !== body) {
+    p.unshift([...el.parentElement.children].indexOf(el));
+    el = el.parentElement;
+  }
+  return p;
+};
+
+// Where a commented element is in this HTML now: its saved path while that
+// still holds the same tag and text, else the first element with that tag
+// and text. Null when it's gone. (The frame bridge does the same live.)
+export function findAnchor(html, anchor) {
+  if (!anchor?.tag) return null;
+  const doc = parse(html);
+  const want = normText(anchor.text);
+  let el = doc.body;
+  for (const i of anchor.path || []) el = el?.children[i];
+  if (!el || el === doc.body || el.tagName.toLowerCase() !== anchor.tag || (want && normText(el.textContent) !== want)) {
+    el = want ? [...doc.body.querySelectorAll(anchor.tag)].find((x) => normText(x.textContent) === want) : null;
+  }
+  return el ? pathTo(doc.body, el) : null;
+}
+
+// A rewrite of a whole screen that kept only a sliver of it: the model
+// answered with one element instead of the page. Never commit those.
+export function looksTruncated(before, after) {
+  const count = (h) => parse(h).body.querySelectorAll("*").length;
+  const was = count(before);
+  return was >= 20 && count(after) < was * 0.2;
+}
+
 // Replaces the element at path with new markup (one or more nodes).
 export function replaceAt(html, path, outer) {
   const doc = parse(html);

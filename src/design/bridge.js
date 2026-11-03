@@ -103,7 +103,7 @@ function bridgeMain() {
     return true;
   }
   function norm(t) {
-    return (t || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    return (t || "").replace(/\s+/g, " ").trim().slice(0, 40).toLowerCase();
   }
   function textOf(el) {
     return el.innerText != null ? el.innerText : el.textContent;

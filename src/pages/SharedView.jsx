@@ -28,6 +28,12 @@ export function SharedView() {
   const [shared, setShared] = useState(null);
   const [status, setStatus] = useState("loading");
   const [updated, setUpdated] = useState(false);
+  // The "Live preview" badge shows briefly on open, then only after updates.
+  const [intro, setIntro] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setIntro(false), 3500);
+    return () => clearTimeout(t);
+  }, []);
   const rev = useRef(null);
 
   // Load, then poll for changes while the page is visible: every few seconds
@@ -155,7 +161,7 @@ export function SharedView() {
   const overlay = (
     <>
       <AnimatePresence>
-        {(device || updated) && (
+        {((device && intro) || updated) && (
           <motion.div
             key={updated ? "updated" : "live"}
             initial={{ opacity: 0, y: -6 }}

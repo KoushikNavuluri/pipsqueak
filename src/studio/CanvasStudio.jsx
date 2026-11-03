@@ -328,8 +328,14 @@ export function CanvasStudio() {
       const results = await Promise.all(
         [...groups].map(async ([screenId, cs]) => {
           try {
-            const res = await studio.aiEdit(screenId, commentsInstruction(cs, screenById(screenId).name), { label: `Resolved ${cs.length} comment${cs.length === 1 ? "" : "s"}` });
-            return { screenId, cs, changed: res.changed };
+            // Use where each pin was last found on the canvas, if anywhere.
+            const located = cs.map((c) => {
+              const at = pinPos[screenId]?.[c.id];
+              return at?.path && c.anchor?.tag ? { ...c, anchor: { ...c.anchor, path: at.path } } : c;
+            });
+            const { done } = await studio.resolveComments(screenId, located, (whole) => commentsInstruction(whole, screenById(screenId).name));
+            const ids = new Set(done.map((c) => c.id));
+            return { screenId, cs: cs.filter((c) => ids.has(c.id)), changed: done.length > 0, left: cs.length - done.length };
           } catch (err) {
             return { screenId, cs, error: err.message };
           }
@@ -342,10 +348,10 @@ export function CanvasStudio() {
         commentState.setComments((all) => all.map((c) => (done.some((d) => d.id === c.id) ? { ...c, resolved_at: at, resolved_by: "Pip" } : c)));
       }
       const failed = results.filter((r) => r.error);
-      const unchanged = results.filter((r) => !r.changed && !r.error);
+      const unchanged = results.filter((r) => !r.error && (!r.changed || r.left > 0));
       const summary = [
         done.length ? `Resolved ${done.length} comment${done.length === 1 ? "" : "s"} on ${results.filter((r) => r.changed).map((r) => screenById(r.screenId)?.name).join(", ")}.` : "",
-        unchanged.length ? `Nothing changed on ${unchanged.map((r) => screenById(r.screenId)?.name).join(", ")}; those comments stay open.` : "",
+        unchanged.length ? `Some comments on ${unchanged.map((r) => screenById(r.screenId)?.name).join(", ")} needed no change or couldn't be applied; they stay open.` : "",
         failed.length ? `Couldn't finish ${failed.map((r) => screenById(r.screenId)?.name).join(", ")}: ${failed[0].error}` : "",
       ]
         .filter(Boolean)
@@ -732,9 +738,9 @@ export function CanvasStudio() {
         </main>
 
         <aside className="hidden w-[340px] shrink-0 flex-col border-l border-line bg-white lg:flex" aria-label="Inspector">
-          <div className="flex shrink-0 border-b border-line px-2">
+          <div className="flex shrink-0 justify-between border-b border-line px-1.5">
             {TABS.map(([k, label]) => (
-              <button key={k} onClick={() => setTab(k)} aria-label={k === "comments" ? `Comments (${openComments.length} open)` : undefined} title={k === "comments" ? "Comments" : undefined} className={cx("relative px-2 py-3 text-[13px] font-semibold", tab === k ? "text-ink" : "text-faint hover:text-ink")}>
+              <button key={k} onClick={() => setTab(k)} aria-label={k === "comments" ? `Comments (${openComments.length} open)` : undefined} title={k === "comments" ? "Comments" : undefined} className={cx("relative shrink-0 px-[6px] py-3 text-[13px] font-semibold", tab === k ? "text-ink" : "text-faint hover:text-ink")}>
                 {k === "comments" ? (
                   <span className="inline-flex items-center gap-1">
                     <MessageSquarePlus size={14} />
