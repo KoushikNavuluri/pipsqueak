@@ -4,21 +4,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useStore } from "./store";
 import { AppData, GuestOnly, RequireAuth, SessionProvider, Splash } from "./session";
 import { Mark } from "./brand";
+import { load, prefetchApp } from "./prefetch";
 
-// Each page is its own chunk. The app ones are fetched during idle time, so
-// moving from the landing page to the dashboard or into a design is instant.
-const load = {
-  dashboard: () => import("./pages/Dashboard"),
-  studio: () => import("./studio/CanvasStudio"),
-  create: () => import("./studio/CreateFlow"),
-  settings: () => import("./pages/Settings"),
-  auth: () => import("./pages/AuthPages"),
-};
-export function prefetchApp(signedIn) {
-  const run = () => (signedIn ? [load.dashboard, load.studio, load.create, load.settings] : [load.auth]).forEach((l) => l().catch(() => {}));
-  if ("requestIdleCallback" in window) requestIdleCallback(run, { timeout: 2500 });
-  else setTimeout(run, 1200);
-}
+export { prefetchApp };
 
 const Landing = lazy(() => import("./pages/Landing").then((m) => ({ default: m.Landing })));
 const SignIn = lazy(() => load.auth().then((m) => ({ default: m.SignIn })));
@@ -32,6 +20,7 @@ const PollView = lazy(() => import("./pages/PollView").then((m) => ({ default: m
 const InviteAccept = lazy(() => import("./pages/InviteAccept").then((m) => ({ default: m.InviteAccept })));
 const CanvasStudio = lazy(() => load.studio().then((m) => ({ default: m.CanvasStudio })));
 const CreateFlow = lazy(() => load.create().then((m) => ({ default: m.CreateFlow })));
+const NotFound = lazy(() => import("./pages/NotFound").then((m) => ({ default: m.NotFound })));
 
 // Keeps the open design and the address bar in step: /app is the dashboard
 // and /app/p/:id a design. On first render the address bar wins; after that,
@@ -91,7 +80,7 @@ function Shell() {
   );
 }
 
-class Boundary extends Component {
+export class Boundary extends Component {
   state = { err: null };
   static getDerivedStateFromError(err) {
     return { err };

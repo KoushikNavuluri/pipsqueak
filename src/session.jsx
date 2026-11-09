@@ -13,6 +13,7 @@ import {
 } from "react-router-dom";
 import { supabase } from "./supabase";
 import { prefetchCloud, takeCloud } from "./cloud";
+import { prefetchApp } from "./prefetch";
 import { StoreProvider, cleanData, emptyData, useStore } from "./store";
 import { BurstLayer, Button, Toasts } from "./ui";
 import { ConflictBar } from "./ConflictBar";
@@ -45,7 +46,7 @@ export function SessionProvider({ children }) {
   // Fetch app code and the user's designs ahead of time, whatever page they're on.
   useEffect(() => {
     if (session === undefined) return;
-    import("./App").then((m) => m.prefetchApp(!!userId));
+    prefetchApp(!!userId);
     if (userId) prefetchCloud(userId);
   }, [userId, session === undefined]);
 
