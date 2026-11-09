@@ -174,12 +174,141 @@ export async function fetchImage(url: string, max = 9_000_000, timeoutMs = 9000)
   return { bytes, ...kind };
 }
 
-// ---------- Search providers ----------
+// ---------- Search & Scraping providers ----------
+
+export function extractUrlsAndDomains(text: string): { urls: string[]; domain: string; entity: string } {
+  const urls: string[] = [];
+  const urlMatches = text.match(/https?:\/\/[^\s"'<>()]+/gi) || [];
+  for (const u of urlMatches) {
+    try {
+      urls.push(new URL(u).href);
+    } catch {}
+  }
+  const domainMatches = text.match(/\b([a-zA-Z0-9-]+\.(?:md|app|io|ai|com|org|net|dev|co|so|sh))\b/gi) || [];
+  for (const d of domainMatches) {
+    const candidate = "https://" + d.toLowerCase();
+    if (!urls.some((u) => u.startsWith(candidate))) {
+      urls.push(candidate);
+    }
+  }
+  let domain = "";
+  let entity = "";
+  if (urls.length > 0) {
+    try {
+      domain = new URL(urls[0]).hostname.replace(/^www\./, "");
+      entity = domain.split(".")[0];
+      entity = entity.charAt(0).toUpperCase() + entity.slice(1);
+    } catch {}
+  }
+  return { urls, domain, entity };
+}
+
+// Scrapes high-resolution images, OG banners, and screenshots directly from a target website.
+export async function scrapeSiteImages(siteUrl: string, maxPages = 4): Promise<Candidate[]> {
+  let base: URL;
+  try {
+    base = new URL(siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`);
+  } catch {
+    return [];
+  }
+  const domain = base.hostname.replace(/^www\./, "");
+  const pagesToScrape = [base.href];
+  const candidates: Candidate[] = [];
+  const seen = new Set<string>();
+
+  try {
+    const res = await safeFetch(base.href, {
+      headers: { "User-Agent": BROWSER_UA, Accept: "text/html,application/xhtml+xml" },
+      timeoutMs: 6000,
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
+
+    for (const m of html.matchAll(/href=["'](\/[a-zA-Z0-9_\-\/]+)["']/gi)) {
+      const path = m[1];
+      if (/^\/(canvas|features|mobile|publish|sync|about|desktop|screenshots|product|gallery|showcase|app)/i.test(path)) {
+        try {
+          const full = new URL(path, base).href;
+          if (!pagesToScrape.includes(full) && pagesToScrape.length < maxPages) {
+            pagesToScrape.push(full);
+          }
+        } catch {}
+      }
+    }
+
+    for (const pageUrl of pagesToScrape) {
+      try {
+        const pageRes = pageUrl === base.href ? { ok: true, text: async () => html } : await safeFetch(pageUrl, {
+          headers: { "User-Agent": BROWSER_UA, Accept: "text/html,application/xhtml+xml" },
+          timeoutMs: 5000,
+        });
+        if (!pageRes.ok) continue;
+        const pageHtml = await pageRes.text();
+        const pageBase = new URL(pageUrl);
+
+        // 1. og:image and twitter:image
+        for (const m of pageHtml.matchAll(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']/gi)) {
+          try {
+            const u = new URL(decode(m[1]), pageBase).href;
+            if (!seen.has(u) && !u.endsWith(".svg") && !u.startsWith("data:")) {
+              seen.add(u);
+              candidates.push({
+                id: `site:${await sha1(u)}`,
+                source: "web",
+                thumb: u,
+                full: u,
+                original: u,
+                page: pageUrl,
+                title: `${domain} official banner / preview`,
+                credit: domain,
+                license: `Official imagery from ${domain}`,
+              });
+            }
+          } catch {}
+        }
+
+        // 2. img tags
+        for (const m of pageHtml.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi)) {
+          const tag = m[0];
+          const src = decode(m[1]);
+          if (src.endsWith(".svg") || src.startsWith("data:") || src.includes("avatar") || src.includes("icon")) continue;
+          try {
+            const u = new URL(src, pageBase).href;
+            if (seen.has(u)) continue;
+            const alt = stripTags(/alt=["']([^"']*)["']/i.exec(tag)?.[1] || "");
+            const w = Number(/width=["']?(\d+)/i.exec(tag)?.[1] || 0);
+            const h = Number(/height=["']?(\d+)/i.exec(tag)?.[1] || 0);
+            if (w && h && (w < 200 || h < 150)) continue;
+            seen.add(u);
+            candidates.push({
+              id: `site:${await sha1(u)}`,
+              source: "web",
+              thumb: u,
+              full: u,
+              original: u,
+              page: pageUrl,
+              title: alt || `${domain} screenshot`,
+              width: w || undefined,
+              height: h || undefined,
+              credit: domain,
+              license: `Official imagery from ${domain}`,
+            });
+          } catch {}
+        }
+      } catch (err) {
+        console.error("Subpage scraping failed", pageUrl, String(err));
+      }
+    }
+  } catch (err) {
+    console.error("Site scraping failed", base.href, String(err));
+  }
+  return candidates;
+}
 
 const bingThumb = (thid: string, w: number, h: number) => `https://th.bing.com/th/id/${thid}?w=${w}&h=${h}&rs=1&p=0`;
 
 export async function searchWeb(query: string, { licensed = false } = {}): Promise<Candidate[]> {
-  const filters = "+filterui:imagesize-large+filterui:photo-photo" + (licensed ? "+filterui:license-L2_L3_L4" : "");
+  const filters = "+filterui:imagesize-large" + (licensed ? "+filterui:license-L2_L3_L4" : "");
   const url = `https://www.bing.com/images/async?q=${encodeURIComponent(query)}&first=0&count=35&qft=${encodeURIComponent(filters)}&mmasync=1&adlt=strict&setlang=en`;
   let html = "";
   try {
@@ -204,9 +333,9 @@ export async function searchWeb(query: string, { licensed = false } = {}): Promi
       const height = Number(params.get("exph")) || 0;
       if (!m.murl || !thid || !/^OIP\.[\w-]+$/.test(thid)) continue;
       const hosts = `${hostOf(m.murl)} ${hostOf(m.purl)}`;
-      if (WATERMARKED.test(hosts) || SYNTHETIC.test(hosts) || /\.ai(\s|$)/.test(hosts) || /\b(ai[- ]generated|mockup|template|vector|illustration|clipart|png)\b/i.test(m.t || "")) continue;
-      // Big enough for a 1080px slide, and not a panorama strip.
-      if (width && height && (Math.min(width, height) < 1000 || width / height > 2.2 || height / width > 2.5)) continue;
+      if (WATERMARKED.test(hosts) || SYNTHETIC.test(hosts) || /\.ai(\s|$)/.test(hosts) || /\b(ai[- ]generated|template|clipart|vectorstock)\b/i.test(m.t || "")) continue;
+      // Big enough for high-DPI slides, allowing standard 720p/1080p desktop & app screenshots.
+      if (width && height && (Math.max(width, height) < 1000 || Math.min(width, height) < 450 || width / height > 2.5 || height / width > 2.6)) continue;
       out.push({
         id: `web:${m.md5 || thid}`,
         source: "web",
@@ -225,6 +354,66 @@ export async function searchWeb(query: string, { licensed = false } = {}): Promi
     }
   }
   return out;
+}
+
+export async function searchDuckDuckGo(query: string, { licensed = false } = {}): Promise<Candidate[]> {
+  try {
+    const tokenUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&t=h_&iax=images&ia=images`;
+    const tokenRes = await safeFetch(tokenUrl, {
+      headers: { "User-Agent": BROWSER_UA },
+      timeoutMs: 6000,
+    });
+    if (!tokenRes.ok) return [];
+    const html = await tokenRes.text();
+    const vqd = /vqd=([0-9-]+)/.exec(html)?.[1] || /vqd=["']([0-9-]+)["']/.exec(html)?.[1];
+    if (!vqd) return [];
+
+    const licenseParam = licensed ? "&f=,,license:commercial," : "&f=,,,";
+    const apiRes = await safeFetch(`https://duckduckgo.com/i.js?l=us-en&o=json&q=${encodeURIComponent(query)}&vqd=${vqd}${licenseParam}`, {
+      headers: { "User-Agent": BROWSER_UA, Referer: "https://duckduckgo.com/" },
+      timeoutMs: 6000,
+    });
+    if (!apiRes.ok) return [];
+    const data = await apiRes.json();
+    const results: Candidate[] = [];
+    const seen = new Set<string>();
+
+    for (const r of data?.results ?? []) {
+      if (!r.image || !r.url) continue;
+      const width = Number(r.width) || 0;
+      const height = Number(r.height) || 0;
+      if (width && height) {
+        if (Math.max(width, height) < 1000 || Math.min(width, height) < 450) continue;
+        if (width / height > 2.5 || height / width > 2.6) continue;
+      }
+      const hosts = `${hostOf(r.image)} ${hostOf(r.url)}`;
+      if (WATERMARKED.test(hosts) || SYNTHETIC.test(hosts) || /\.ai(\s|$)/.test(hosts)) continue;
+      if (/\b(ai[- ]generated|template|clipart|vectorstock)\b/i.test(r.title || "")) continue;
+
+      const key = r.image;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        id: `ddg:${await sha1(r.image)}`,
+        source: "web",
+        thumb: r.thumbnail || r.image,
+        full: r.image,
+        original: r.image,
+        page: r.url,
+        title: stripTags(r.title || "").slice(0, 140),
+        width,
+        height,
+        credit: hostOf(r.url) || hostOf(r.image),
+        license: licensed ? "Commercial use per DuckDuckGo filter" : "Unknown: check the source page before publishing",
+      });
+      if (results.length >= 25) break;
+    }
+    return results;
+  } catch (err) {
+    console.error("DuckDuckGo search failed", String(err));
+    return [];
+  }
 }
 
 export async function searchWikimedia(query: string): Promise<Candidate[]> {
@@ -290,19 +479,45 @@ export async function searchOpenverse(query: string): Promise<Candidate[]> {
   }
 }
 
-// Candidates for one image need: web results first, plus Commons for named
-// things and openly licensed photos when the user wants licensed images only.
-export async function findCandidates(need: { query: string; altQuery?: string; kind?: string }, { licensed = false, limit = 8 } = {}) {
+// Candidates for one image need: web results (Bing + DuckDuckGo), plus Commons for named
+// things, site candidates from direct scraping, and openly licensed photos when requested.
+export async function findCandidates(
+  need: { query: string; altQuery?: string; kind?: string },
+  {
+    licensed = false,
+    limit = 8,
+    siteCandidates = [],
+    entityName = "",
+  }: { licensed?: boolean; limit?: number; siteCandidates?: Candidate[]; entityName?: string } = {},
+) {
   const q = need.query.trim();
   const alt = (need.altQuery || "").trim();
-  const jobs: Promise<Candidate[]>[] = [searchWeb(q, { licensed })];
+  const entityQ = entityName && !q.toLowerCase().includes(entityName.toLowerCase()) ? `${entityName} ${q}` : "";
+
+  const jobs: Promise<Candidate[]>[] = [
+    searchWeb(q, { licensed }),
+    searchDuckDuckGo(q, { licensed }),
+  ];
+  if (entityQ) {
+    jobs.push(searchDuckDuckGo(entityQ, { licensed }));
+  }
   if (need.kind === "entity") jobs.push(searchWikimedia(q));
   if (licensed) jobs.push(searchOpenverse(q));
+
   let lists = await Promise.all(jobs);
-  if (lists.flat().length < 4 && alt) lists = [...lists, ...(await Promise.all([searchWeb(alt, { licensed }), licensed ? searchOpenverse(alt) : Promise.resolve([])]))];
-  const [web = [], ...rest] = lists;
-  // Interleave so named-thing and licensed results aren't buried under web results.
-  const extra = rest.flat();
+  if (lists.flat().length < 4 && alt) {
+    const altEntityQ = entityName && !alt.toLowerCase().includes(entityName.toLowerCase()) ? `${entityName} ${alt}` : "";
+    lists = [
+      ...lists,
+      ...(await Promise.all([
+        searchWeb(alt, { licensed }),
+        searchDuckDuckGo(alt, { licensed }),
+        altEntityQ ? searchDuckDuckGo(altEntityQ, { licensed }) : Promise.resolve([]),
+        licensed ? searchOpenverse(alt) : Promise.resolve([]),
+      ])),
+    ];
+  }
+
   const merged: Candidate[] = [];
   const seen = new Set<string>();
   const add = (c?: Candidate) => {
@@ -313,19 +528,46 @@ export async function findCandidates(need: { query: string; altQuery?: string; k
     seen.add(c.id);
     merged.push(c);
   };
+
+  // 1. Add matching official site candidates first
+  if (siteCandidates.length > 0) {
+    const qWords = `${q} ${alt}`.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    const scoredSite = siteCandidates.map((c) => {
+      const text = `${c.title || ""} ${c.full || ""}`.toLowerCase();
+      const score = qWords.reduce((acc, w) => acc + (text.includes(w) ? 2 : 0), 0);
+      return { c, score };
+    });
+    scoredSite.sort((a, b) => b.score - a.score);
+    for (const { c } of scoredSite.slice(0, 4)) {
+      add(c);
+    }
+  }
+
+  const [web = [], ddg = [], ...rest] = lists;
+  const extra = rest.flat();
+
   // Named things: trusted publishers and official sites first, and sizes that
-  // image generators use (1024², 1536×1024…) last; blogs often illustrate
-  // news with generated art.
+  // image generators use (1024², 1536×1024…) last.
   const AI_SIZES = new Set(["1024x1024", "1536x1024", "1024x1536", "1792x1024", "1024x1792", "1344x768", "768x1344"]);
-  const TRUSTED = /(^|\.)(meta\.com|about\.fb\.com|fb\.com|apple\.com|google\.com|microsoft\.com|theverge\.com|techcrunch\.com|engadget\.com|cnet\.com|wired\.com|reuters\.com|apnews\.com|bloomberg\.com|nytimes\.com|bbc\.(com|co\.uk)|cnbc\.com|tomsguide\.com|zdnet\.com|arstechnica\.com|businessinsider\.com|nasa\.gov|wikipedia\.org|wikimedia\.org)$/i;
+  const TRUSTED = /(^|\.)(meta\.com|about\.fb\.com|fb\.com|apple\.com|google\.com|microsoft\.com|theverge\.com|techcrunch\.com|engadget\.com|cnet\.com|wired\.com|reuters\.com|apnews\.com|bloomberg\.com|nytimes\.com|bbc\.(com|co\.uk)|cnbc\.com|tomsguide\.com|zdnet\.com|arstechnica\.com|businessinsider\.com|nasa\.gov|wikipedia\.org|wikimedia\.org|github\.com)$/i;
   const score = (c: Candidate) => (TRUSTED.test(c.credit || "") ? 0 : 1) + (AI_SIZES.has(`${c.width}x${c.height}`) ? 2 : 0);
-  if (need.kind === "entity") web.sort((a, b) => score(a) - score(b));
-  else web.sort((a, b) => (AI_SIZES.has(`${a.width}x${a.height}`) ? 1 : 0) - (AI_SIZES.has(`${b.width}x${b.height}`) ? 1 : 0));
-  for (let i = 0; merged.length < limit * 2 && (i < web.length || i < extra.length); i++) {
+
+  const combinedWeb = [...ddg, ...web];
+  if (need.kind === "entity") combinedWeb.sort((a, b) => score(a) - score(b));
+  else combinedWeb.sort((a, b) => (AI_SIZES.has(`${a.width}x${a.height}`) ? 1 : 0) - (AI_SIZES.has(`${b.width}x${b.height}`) ? 1 : 0));
+
+  for (let i = 0; merged.length < limit * 2 && (i < combinedWeb.length || i < extra.length); i++) {
     if (need.kind === "entity" || licensed) add(extra[i]);
-    add(web[i]);
+    add(combinedWeb[i]);
     if (!(need.kind === "entity" || licensed)) add(extra[i]);
   }
+
+  // If we still need more candidates and have site candidates, fill with remaining site candidates
+  for (const c of siteCandidates) {
+    if (merged.length >= limit) break;
+    add(c);
+  }
+
   return merged.slice(0, limit);
 }
 

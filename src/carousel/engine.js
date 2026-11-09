@@ -214,6 +214,9 @@ export async function findImages({ api, projectId, variantId, only, slides: give
     if (photoIdx.length) {
       const { result } = await askCarousel("images", {
         topic: c.topic,
+        notes: c.notes || "",
+        sourceUrl: c.sourceUrl || "",
+        sourceText: c.sourceText || "",
         slides: slidesForApi(v.slides),
         ids: v.slides.map((s) => s.id),
         only: photoIdx,
@@ -248,8 +251,8 @@ export async function findImages({ api, projectId, variantId, only, slides: give
   }
 }
 
-export async function searchPhotos(query, { licensed, entity } = {}) {
-  const { result } = await askCarousel("search", { query, licensed, entity });
+export async function searchPhotos(query, { licensed, entity, topic, siteUrl } = {}) {
+  const { result } = await askCarousel("search", { query, licensed, entity, topic, siteUrl });
   return result.candidates;
 }
 

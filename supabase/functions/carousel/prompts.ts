@@ -178,7 +178,9 @@ IMAGE BRIEFS (for slides with image.use true)
 - query: 2–6 plain English words describing a photographable scene, as a photo editor would search: subject + setting + mood. "barista pouring latte art close up", not "coffee success".
 - altQuery: a second, different search for the same need.
 - kind: entity when the slide is about one specific real, named thing (a person, place, building, product, artwork, event); photo for a generic scene; texture for a background mood; illustration only for the illustrated approach.
-- When the carousel is about a named product, brand, company or person, every query names it ("Meta Muse app", "Meta Ray-Ban Display glasses", "Mark Zuckerberg Connect keynote") and uses kind entity, so the photos show the real thing: official product images, launch photos, the app on a phone, the people involved. For a use-case slide, search for the product doing that thing or the partner it uses ("Meta Muse shopping", "Expedia app on phone").
+- When the carousel is about a named product, software, app, tool, website, brand, company or person (such as "Obsidian", "https://obsidian.md/", "Meta Muse", "Linear", "Figma", "Raycast"):
+  EVERY slide's query and altQuery MUST explicitly name the specific product or brand ("Obsidian markdown editor", "Obsidian Dataview plugin", "Obsidian canvas flowchart", "Obsidian graph view"). NEVER use generic queries like "code editor glow" or "typing on laptop" when the topic is about a specific product, app or website. Set kind to entity.
+  For use-case slides, search for the product performing that feature or the integration ("Obsidian mobile note sync", "Obsidian graph view connections").
 - With image approach photo_led, give most slides an image (cover, photo, split and step slides all show one); with photo_accents, 2–4 slides.
 - Real people only when they are public figures named in the content.
 - Avoid queries that bring back stock-photo clichés (handshakes, people pointing at screens, lightbulbs, puzzle pieces).
@@ -240,13 +242,14 @@ export const RANK_SYSTEM = `You are the photo editor of a top Instagram studio. 
 
 A GOOD PICK
 - Clearly shows what the slide's image brief asks for. Relevance comes first.
-- Looks like an authentic, well-made real photograph: good light, sharp, a clear subject, room for text.
+- Looks like an authentic, well-made real photograph or screenshot: good light, sharp, a clear subject, room for text.
 - Matches the other picks so the carousel feels consistent in color temperature and mood.
 
 REJECT
-- Watermarks, stock-agency marks, visible logos that aren't the subject, big blocks of text, memes, collages, borders, low resolution, clip-art and anything off-topic.
+- Watermarks, stock-agency marks, visible third-party logos that aren't the subject, big unrelated blocks of text, memes, borders, low resolution, clip-art and anything off-topic.
 - Device and print mockups and templates with placeholder text.
 - Exception: when the slide is about a specific real product, brand or person, official product shots, launch and press photos, the real app on a phone or screen, and the product's own logo are exactly right. Prefer them over generic scenes, and reject look-alikes of a different product.
+- For software, apps, websites, digital tools, and use cases: real screenshots of the actual app UI, markdown notes, code in an editor, graph views, canvases, and software interfaces are the #1 IDEAL picks! Do NOT reject them for having text or UI on screen. Brand logos, product icons, and real application windows are strongly preferred over generic stock photos.
 - AI-generated images. Tells: garbled or invented letters and numbers (on cards, signs, screens, books), warped hands or faces, melted details, plastic-smooth skin, impossible reflections, over-perfect cinematic glow. When in doubt, reject.
 - Using the same or a near-identical image on two slides.
 

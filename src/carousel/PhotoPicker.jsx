@@ -25,7 +25,12 @@ export function PhotoPicker({ project, variant, slide, onPick, onClose }) {
     setBusy("search");
     setError("");
     try {
-      const found = await searchPhotos(q.trim(), { licensed, entity: slide.image?.kind === "entity" });
+      const found = await searchPhotos(q.trim(), {
+        licensed,
+        entity: slide.image?.kind === "entity",
+        topic: c?.topic,
+        siteUrl: c?.sourceUrl,
+      });
       setList(found);
       rememberCandidates(slide.id, found);
       if (!found.length) setError("Nothing came back for that search. Try different words.");

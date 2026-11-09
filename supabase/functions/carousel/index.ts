@@ -32,7 +32,18 @@ import {
   writeRequestText,
   writeSchema,
 } from "./prompts.ts";
-import { type Candidate, findCandidates, fromBase64, pinCandidate, readPage, sniffImage, storeBytes, thumbnailsFor } from "./media.ts";
+import {
+  type Candidate,
+  extractUrlsAndDomains,
+  findCandidates,
+  fromBase64,
+  pinCandidate,
+  readPage,
+  scrapeSiteImages,
+  sniffImage,
+  storeBytes,
+  thumbnailsFor,
+} from "./media.ts";
 
 const DAILY_LIMIT = Number(Deno.env.get("AI_DAILY_LIMIT") ?? 150);
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -391,8 +402,23 @@ async function images(b: any, admin: any, userId: string) {
     .filter(({ s, i }) => s.image.use && s.image.kind !== "illustration" && (!wanted || wanted.has(i)));
   if (!needs.length) return { out: { slides: [] }, result: null };
 
+  const combinedContext = `${str(b.topic, 500)} ${str(b.sourceUrl, 500)} ${str(b.notes, 500)} ${str(b.sourceText, 500)}`;
+  const { urls, entity } = extractUrlsAndDomains(combinedContext);
+  let siteCandidates: Candidate[] = [];
+  if (urls.length > 0) {
+    try {
+      siteCandidates = await scrapeSiteImages(urls[0], 4);
+    } catch (err) {
+      console.error("Site image scraping error", err);
+    }
+  }
+
   const found = new Map<number, Candidate[]>();
-  await Promise.all(needs.map(async ({ s, i }) => found.set(i, await findCandidates(s.image, { licensed, limit: 7 }))));
+  await Promise.all(
+    needs.map(async ({ s, i }) =>
+      found.set(i, await findCandidates(s.image, { licensed, limit: 8, siteCandidates, entityName: entity })),
+    ),
+  );
   const thumbs = await thumbnailsFor([...found.values()].flat());
   let { verdicts, result } = await rankCandidates(b, needs.map(({ s, i }) => ({ i, s, list: found.get(i) ?? [] })), thumbs);
 
@@ -425,7 +451,11 @@ async function images(b: any, admin: any, userId: string) {
     const more = new Map<number, Candidate[]>();
     await Promise.all(
       missing.map(async ({ s, i }) => {
-        const lists = await Promise.all(queries(s).map((q: string) => findCandidates({ query: q, kind: s.image.kind }, { licensed, limit: 5 })));
+        const lists = await Promise.all(
+          queries(s).map((q: string) =>
+            findCandidates({ query: q, kind: s.image.kind }, { licensed, limit: 5, siteCandidates, entityName: entity }),
+          ),
+        );
         const seen = new Set((found.get(i) ?? []).map((c) => c.id));
         const fresh: Candidate[] = [];
         for (const c of lists.flat()) {
@@ -444,6 +474,24 @@ async function images(b: any, admin: any, userId: string) {
     for (const { i } of missing) {
       found.set(i, [...(found.get(i) ?? []), ...(more.get(i) ?? [])]);
       if (verdicts.has(i)) await pinFirst(i);
+    }
+  }
+
+  // Reliable fallback: if a slide still has no photo, pick from available candidates so requested slides are never left blank
+  const stillMissing = needs.filter(({ i }) => !chosen.has(i));
+  for (const { i } of stillMissing) {
+    const list = found.get(i) ?? [];
+    for (const c of list) {
+      if (used.has(c.id)) continue;
+      used.add(c.id);
+      try {
+        const src = await pinCandidate(admin, userId, folder, c);
+        chosen.set(i, { ...publicCandidate(c), src, focus: { x: 50, y: 45 }, textArea: "busy" });
+        problems.delete(i);
+        break;
+      } catch (err) {
+        used.delete(c.id);
+      }
     }
   }
 
@@ -601,7 +649,18 @@ Deno.serve(async (req) => {
       case "search": {
         const query = str(body.query, 100);
         if (query.length < 2) throw new HttpError(400, "Type what the photo should show.");
-        const list = await findCandidates({ query, kind: body.entity ? "entity" : "photo" }, { licensed: body.licensed === true, limit: 16 });
+        const context = `${query} ${str(body.topic, 200)} ${str(body.siteUrl, 200)}`;
+        const { urls, entity } = extractUrlsAndDomains(context);
+        let siteCandidates: Candidate[] = [];
+        if (urls.length > 0) {
+          try {
+            siteCandidates = await scrapeSiteImages(urls[0], 2);
+          } catch {}
+        }
+        const list = await findCandidates(
+          { query, kind: body.entity ? "entity" : "photo" },
+          { licensed: body.licensed === true, limit: 16, siteCandidates, entityName: entity },
+        );
         await done(null);
         return json(200, { result: { candidates: list.map(publicCandidate) }, quota });
       }
