@@ -5,6 +5,28 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/s/:token",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(.*(bot|facebookexternalhit|twitterbot|slackbot|discordbot|whatsapp|telegram|preview|skype|curl).*)"
+        }
+      ],
+      "destination": "/api/share-preview?token=:token"
+    },
+    {
+      "source": "/poll/:token",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(.*(bot|facebookexternalhit|twitterbot|slackbot|discordbot|whatsapp|telegram|preview|skype|curl).*)"
+        }
+      ],
+      "destination": "/api/share-preview?token=:token&mode=poll"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

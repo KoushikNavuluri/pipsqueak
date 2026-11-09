@@ -15,6 +15,9 @@ import { CanvasThumbs, DirectionPicker } from "../studio/DirectionGallery";
 import { skillById } from "../design/skills.js";
 import { ShowcaseCard, ShowcaseViewer, remixShowcase, useShowcase } from "../showcase";
 import { UserMenu } from "./UserMenu";
+import { WorkspaceSwitcher } from "../components/WorkspaceSwitcher";
+import { WorkspaceModal } from "../components/WorkspaceModal";
+import { NotificationBell } from "../components/NotificationBell";
 
 const IDEAS = [
   "A zine-style app for an independent music festival in Goa",
@@ -377,8 +380,10 @@ export function Dashboard() {
   const [query, setQuery] = useState("");
   const [starred, setStarred] = useState(false);
   const [viewing, setViewing] = useState(null);
+  const [activeWorkspace, setActiveWorkspace] = useState(null);
+  const [workspaceModal, setWorkspaceModal] = useState(null);
   const showcase = useShowcase();
-  const canvas = s.data.projects.filter((p) => p.kind === "canvas");
+  const canvas = s.data.projects.filter((p) => p.kind === "canvas" && (activeWorkspace ? p.workspace_id === activeWorkspace.id : !p.workspace_id));
   const legacy = s.data.projects.filter((p) => p.kind !== "canvas");
   const first = displayName(user, profile).split(/[\s.@_]/)[0];
   const shown = useMemo(() => {
@@ -423,7 +428,15 @@ export function Dashboard() {
     <div data-scroll="dashboard" className="sb relative h-full overflow-y-auto overflow-x-hidden">
       <header className="sticky top-0 z-30 border-b border-transparent bg-paper/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <Logo to="/app" />
+          <div className="flex items-center gap-3">
+            <Logo to="/app" />
+            <WorkspaceSwitcher
+              activeWorkspace={activeWorkspace}
+              onSelect={setActiveWorkspace}
+              onManage={(ws) => setWorkspaceModal({ workspace: ws })}
+              onCreate={() => setWorkspaceModal({ workspace: null })}
+            />
+          </div>
           <div className="flex items-center gap-2">
             <Link
               to="/app/settings#usage"
@@ -432,6 +445,7 @@ export function Dashboard() {
             >
               <PipGlyph size={11} /> {left} credits
             </Link>
+            <NotificationBell />
             <UserMenu />
           </div>
         </div>
@@ -526,6 +540,18 @@ export function Dashboard() {
         )}
       </main>
       <AnimatePresence>{viewing && <ShowcaseViewer key="viewer" item={viewing} onClose={() => setViewing(null)} onRemix={remix} />}</AnimatePresence>
+      {workspaceModal && (
+        <WorkspaceModal
+          workspace={workspaceModal.workspace}
+          onClose={() => setWorkspaceModal(null)}
+          onCreated={(ws) => {
+            setActiveWorkspace(ws);
+            setWorkspaceModal(null);
+          }}
+          toast={(msg, tone) => api.toast(msg, { tone })}
+        />
+      )}
     </div>
   );
 }
+

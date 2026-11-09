@@ -1,18 +1,19 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Braces, Copy, FileCode2, FileText, Palette, Play, X } from "lucide-react";
+import { Braces, Copy, FileCode2, FileText, ImageIcon, Palette, Play, X } from "lucide-react";
 import { strToU8, zipSync } from "fflate";
 import { Button } from "../ui";
 import { download } from "../util";
-import { htmlPrototype, reactProject, tokensFile } from "../design/exportDesign.js";
+import { htmlPrototype, reactProject, renderScreenPng, tokensFile } from "../design/exportDesign.js";
 import { designMd } from "../design/system.js";
+import { VIEWPORTS } from "../design/engine.js";
 
 const slug = (s) => String(s || "app").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "app";
 
 function zip(files, folder) {
   const tree = {};
   for (const [path, content] of Object.entries(files)) {
-    tree[`${folder}/${path}`] = strToU8(content);
+    tree[`${folder}/${path}`] = typeof content === "string" ? strToU8(content) : new Uint8Array(content);
   }
   return new Blob([zipSync(tree, { level: 6 })], { type: "application/zip" });
 }
@@ -36,6 +37,7 @@ export function DesignExport({ project, screen, onClose, toast }) {
   const [busy, setBusy] = useState(null);
   const name = slug(project.name);
   const ready = project.screens.filter((s) => s.html).length;
+  const vp = project.spec?.platform === "mobile" ? VIEWPORTS.mobile : VIEWPORTS.desktop;
 
   const run = async (key, fn) => {
     setBusy(key);
@@ -46,6 +48,22 @@ export function DesignExport({ project, screen, onClose, toast }) {
     } finally {
       setBusy(null);
     }
+  };
+
+  const exportAllPngs = async () => {
+    const screens = project.screens.filter((s) => s.html);
+    const files = {};
+    for (const sc of screens) {
+      const blob = await renderScreenPng(sc, project.system, project.kit, vp.w, vp.h);
+      const buf = await blob.arrayBuffer();
+      files[`${slug(sc.name)}.png`] = new Uint8Array(buf);
+    }
+    download(zip(files, `${name}-screens`), `${name}-screens-png.zip`);
+  };
+
+  const exportSinglePng = async (sc) => {
+    const blob = await renderScreenPng(sc, project.system, project.kit, vp.w, vp.h);
+    download(blob, `${slug(sc.name)}.png`);
   };
 
   return (
@@ -79,6 +97,18 @@ export function DesignExport({ project, screen, onClose, toast }) {
               {busy === "html" ? "Packing…" : "Download .zip"}
             </Button>
           </Row>
+          <Row icon={ImageIcon} title="Screen Images (PNG)" desc="High-resolution PNG screenshots of your screens.">
+            <div className="flex gap-2">
+              {screen?.html && (
+                <Button size="sm" variant="secondary" disabled={!!busy} onClick={() => run("png-current", () => exportSinglePng(screen))}>
+                  {busy === "png-current" ? "Rendering…" : "This screen"}
+                </Button>
+              )}
+              <Button size="sm" variant="secondary" disabled={!!busy} onClick={() => run("png-all", exportAllPngs)}>
+                {busy === "png-all" ? "Rendering…" : "All screens (.zip)"}
+              </Button>
+            </div>
+          </Row>
           <Row icon={FileText} title="DESIGN.md" desc="The design system as tokens plus rules, for designers and coding agents.">
             <Button size="sm" variant="secondary" disabled={!!busy} onClick={() => run("md", () => download(new Blob([designMd(project)], { type: "text/markdown" }), "DESIGN.md"))}>
               Download
@@ -111,3 +141,4 @@ export function DesignExport({ project, screen, onClose, toast }) {
     </motion.div>
   );
 }
+

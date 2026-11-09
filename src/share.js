@@ -1,21 +1,20 @@
 import { supabase } from "./supabase";
 
-// Share links, phone previews and comments. See the 20261103000000 migration
-// for the tables and the functions people with a link can call.
+// Share links, phone previews, comments, polls, workspaces, and analytics.
 
 export const DEVICE_LINK_HOURS = 12;
 
 export const shareUrl = (token) => `${location.origin}/s/${token}`;
+export const pollUrl = (token) => `${location.origin}/poll/${token}`;
+export const inviteUrl = (token) => `${location.origin}/invite/${token}`;
 
 const friendly = (error, fallback) => {
   if (!error) return null;
-  // The design row is written about half a second after a change; a share
-  // or comment made before that can't point at it yet.
   if (error.code === "23503") return new Error("Your latest changes are still saving. Try again in a moment.");
   return new Error(error.message || fallback);
 };
 
-// ---------- Owner side ----------
+// ---------- Share links & controls ----------
 
 export async function getShare(projectId, kind = "link") {
   const { data, error } = await supabase.from("shares").select("*").eq("project_id", projectId).eq("kind", kind).maybeSingle();
@@ -23,10 +22,17 @@ export async function getShare(projectId, kind = "link") {
   return data;
 }
 
-export async function createShare(projectId, { kind = "link", allowComments = false, allowRemix = false, expiresAt = null } = {}) {
+export async function createShare(projectId, { kind = "link", allowComments = false, allowRemix = false, expiresAt = null, passcode = null } = {}) {
   const { data, error } = await supabase
     .from("shares")
-    .insert({ project_id: projectId, kind, allow_comments: allowComments, allow_remix: allowRemix, expires_at: expiresAt })
+    .insert({
+      project_id: projectId,
+      kind,
+      allow_comments: allowComments,
+      allow_remix: allowRemix,
+      expires_at: expiresAt,
+      passcode: passcode ? passcode.trim() : null,
+    })
     .select("*")
     .single();
   if (error) throw friendly(error, "Couldn't create the link.");
@@ -34,7 +40,9 @@ export async function createShare(projectId, { kind = "link", allowComments = fa
 }
 
 export async function updateShare(token, patch) {
-  const { data, error } = await supabase.from("shares").update(patch).eq("token", token).select("*").single();
+  const clean = { ...patch };
+  if ("passcode" in clean) clean.passcode = clean.passcode ? clean.passcode.trim() : null;
+  const { data, error } = await supabase.from("shares").update(clean).eq("token", token).select("*").single();
   if (error) throw friendly(error, "Couldn't update the link.");
   return data;
 }
@@ -44,14 +52,17 @@ export async function deleteShare(token) {
   if (error) throw friendly(error, "Couldn't turn the link off.");
 }
 
-// A new address for the same share; the old one stops working.
 export async function rotateShare(share) {
   await deleteShare(share.token);
-  return createShare(share.project_id, { kind: share.kind, allowComments: share.allow_comments, allowRemix: share.allow_remix, expiresAt: share.expires_at });
+  return createShare(share.project_id, {
+    kind: share.kind,
+    allowComments: share.allow_comments,
+    allowRemix: share.allow_remix,
+    expiresAt: share.expires_at,
+    passcode: share.passcode,
+  });
 }
 
-// The phone-preview link: reused while it lasts, renewed for another
-// DEVICE_LINK_HOURS each time it's shown.
 export async function deviceShare(projectId) {
   const expiresAt = new Date(Date.now() + DEVICE_LINK_HOURS * 3600 * 1000).toISOString();
   const existing = await getShare(projectId, "device");
@@ -62,16 +73,48 @@ export async function deviceShare(projectId) {
   return createShare(projectId, { kind: "device", expiresAt });
 }
 
-export async function listComments(projectId) {
-  const { data, error } = await supabase.from("comments").select("*").eq("project_id", projectId).order("created_at", { ascending: true });
-  if (error) throw friendly(error, "Couldn't load comments.");
-  return data;
+// ---------- Share stats & view tracking ----------
+
+export async function getShareStats(token) {
+  const { data, error } = await supabase.rpc("get_share_stats", { p_token: token });
+  if (error) return { total: 0, mobile: 0, tablet: 0, desktop: 0, lastViewed: null };
+  return data || { total: 0, mobile: 0, tablet: 0, desktop: 0, lastViewed: null };
 }
 
-export async function addComment({ projectId, screenId, anchor, body, authorName, authorId }) {
+export async function recordShareView(token, device = "desktop", referrer = null) {
+  try {
+    await supabase.rpc("record_share_view", {
+      p_token: token,
+      p_device: device,
+      p_referrer: referrer ? referrer.slice(0, 255) : null,
+    });
+  } catch {}
+}
+
+// ---------- Comments & Threaded replies ----------
+
+export async function listComments(projectId) {
   const { data, error } = await supabase
     .from("comments")
-    .insert({ project_id: projectId, screen_id: screenId, anchor: anchor || {}, body, author_id: authorId, author_name: authorName })
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+  if (error) throw friendly(error, "Couldn't load comments.");
+  return data || [];
+}
+
+export async function addComment({ projectId, screenId, anchor, body, authorName, authorId, parentId = null }) {
+  const { data, error } = await supabase
+    .from("comments")
+    .insert({
+      project_id: projectId,
+      screen_id: screenId,
+      anchor: anchor || {},
+      body,
+      author_id: authorId,
+      author_name: authorName,
+      parent_id: parentId,
+    })
     .select("*")
     .single();
   if (error) throw friendly(error, "Couldn't add the comment.");
@@ -89,7 +132,6 @@ export async function deleteComment(id) {
   if (error) throw friendly(error, "Couldn't delete the comment.");
 }
 
-// Calls onChange whenever a comment on this design is added, edited or removed.
 export function watchComments(projectId, onChange) {
   const channel = supabase
     .channel(`comments:${projectId}:${Math.random().toString(36).slice(2, 8)}`)
@@ -100,10 +142,12 @@ export function watchComments(projectId, onChange) {
 
 // ---------- Viewer side (works signed out) ----------
 
-// { rev, kind, allowComments, allowRemix, owner, project } or { rev, unchanged }
-// when knownRev is current, or null when the link is off or has expired.
-export async function getShared(token, knownRev = null) {
-  const { data, error } = await supabase.rpc("get_share", { p_token: token, p_known_rev: knownRev });
+export async function getShared(token, knownRev = null, passcode = null) {
+  const { data, error } = await supabase.rpc("get_share", {
+    p_token: token,
+    p_known_rev: knownRev,
+    p_passcode: passcode,
+  });
   if (error) throw friendly(error, "Couldn't open this link.");
   return data;
 }
@@ -114,20 +158,19 @@ export async function getSharedComments(token) {
   return data || [];
 }
 
-export async function addSharedComment(token, { screenId, anchor, body, author }) {
+export async function addSharedComment(token, { screenId, anchor, body, author, parentId = null }) {
   const { data, error } = await supabase.rpc("add_share_comment", {
     p_token: token,
     p_screen_id: screenId,
     p_anchor: anchor || {},
     p_body: body,
     p_author: author,
+    p_parent_id: parentId,
   });
   if (error) throw friendly(error, "Couldn't add the comment.");
   return data;
 }
 
-// What a comment stores about the element it's pinned to. Kept small: the
-// database caps it at 2 KB.
 export function anchorFrom(info) {
   if (!info?.path) return {};
   return {
@@ -146,7 +189,6 @@ export function anchorLabel(anchor, screenName) {
   return screenName ? `${what} on ${screenName}` : what;
 }
 
-// A remixable copy of a shared design for the signed-in viewer's account.
 export function remixFromShare(shared, newId) {
   const p = shared.project;
   const now = Date.now();
@@ -162,4 +204,146 @@ export function remixFromShare(shared, newId) {
     remixOf: "share",
     screens: (p.screens || []).map((sc) => ({ ...sc, versions: [], changedAt: now })),
   };
+}
+
+// ---------- In-app Notifications ----------
+
+export async function listNotifications(userId) {
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (error) return [];
+  return data || [];
+}
+
+export async function markNotificationRead(id) {
+  await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", id);
+}
+
+export async function markAllNotificationsRead(userId) {
+  await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("user_id", userId).is("read_at", null);
+}
+
+export function watchNotifications(userId, onChange) {
+  const channel = supabase
+    .channel(`notifications:${userId}:${Math.random().toString(36).slice(2, 8)}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, () => onChange())
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
+
+// ---------- Team Workspaces ----------
+
+export async function listWorkspaces() {
+  const { data, error } = await supabase.from("workspaces").select("*").order("created_at", { ascending: true });
+  if (error) throw friendly(error, "Couldn't load workspaces.");
+  return data || [];
+}
+
+export async function createWorkspace(name) {
+  const { data, error } = await supabase.from("workspaces").insert({ name: name.trim() }).select("*").single();
+  if (error) throw friendly(error, "Couldn't create workspace.");
+  // Add creator as owner member
+  const user = (await supabase.auth.getUser()).data.user;
+  if (user) {
+    await supabase.from("workspace_members").insert({
+      workspace_id: data.id,
+      user_id: user.id,
+      email: user.email,
+      role: "owner",
+      status: "accepted",
+    });
+  }
+  return data;
+}
+
+export async function listWorkspaceMembers(workspaceId) {
+  const { data, error } = await supabase.from("workspace_members").select("*").eq("workspace_id", workspaceId).order("created_at", { ascending: true });
+  if (error) throw friendly(error, "Couldn't load workspace members.");
+  return data || [];
+}
+
+export async function inviteWorkspaceMember(workspaceId, email, role = "editor") {
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .insert({
+      workspace_id: workspaceId,
+      email: email.trim().toLowerCase(),
+      role,
+      status: "pending",
+    })
+    .select("*")
+    .single();
+  if (error) throw friendly(error, "Couldn't invite member. They may already be in this workspace.");
+  return data;
+}
+
+export async function removeWorkspaceMember(memberId) {
+  const { error } = await supabase.from("workspace_members").delete().eq("id", memberId);
+  if (error) throw friendly(error, "Couldn't remove member.");
+}
+
+export async function updateMemberRole(memberId, role) {
+  const { data, error } = await supabase.from("workspace_members").update({ role }).eq("id", memberId).select("*").single();
+  if (error) throw friendly(error, "Couldn't update role.");
+  return data;
+}
+
+export async function acceptWorkspaceInvite(token) {
+  const { data, error } = await supabase.rpc("accept_workspace_invite", { p_token: token });
+  if (error) throw friendly(error, "Couldn't join workspace.");
+  return data;
+}
+
+// ---------- Design Polls ----------
+
+export async function createPoll({ projectId, title, question, options, showResults = true, expiresAt = null }) {
+  const { data, error } = await supabase
+    .from("polls")
+    .insert({
+      project_id: projectId,
+      title: title.trim(),
+      question: question ? question.trim() : "Which design do you prefer?",
+      options,
+      show_results: showResults,
+      expires_at: expiresAt,
+    })
+    .select("*")
+    .single();
+  if (error) throw friendly(error, "Couldn't create the poll.");
+  return data;
+}
+
+export async function getPoll(token, voterKey = null) {
+  const { data, error } = await supabase.rpc("get_poll", { p_token: token, p_voter_key: voterKey });
+  if (error) throw friendly(error, "Couldn't open this poll.");
+  return data;
+}
+
+export async function castPollVote(token, optionId, voterKey, feedback = null) {
+  const { data, error } = await supabase.rpc("cast_poll_vote", {
+    p_token: token,
+    p_option_id: optionId,
+    p_voter_key: voterKey,
+    p_feedback: feedback,
+  });
+  if (error) throw friendly(error, "Couldn't record your vote.");
+  return data;
+}
+
+export async function listProjectPolls(projectId) {
+  const { data, error } = await supabase.from("polls").select("*").eq("project_id", projectId).order("created_at", { ascending: false });
+  if (error) return [];
+  return data || [];
+}
+
+export function watchPollVotes(pollId, onChange) {
+  const channel = supabase
+    .channel(`poll_votes:${pollId}:${Math.random().toString(36).slice(2, 8)}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "poll_votes", filter: `poll_id=eq.${pollId}` }, () => onChange())
+    .subscribe();
+  return () => supabase.removeChannel(channel);
 }

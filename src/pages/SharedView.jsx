@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { MessageCircle, MessageSquarePlus, Radio, Shuffle, X } from "lucide-react";
+import { CornerDownRight, KeyRound, Lock, MessageCircle, MessageSquare, MessageSquarePlus, Radio, Shuffle, X } from "lucide-react";
 import { Present } from "../studio/Present";
 import { Notice, Splash, displayName, useSession } from "../session";
 import { Button, cx, useMedia } from "../ui";
-import { addSharedComment, anchorFrom, anchorLabel, getShared, getSharedComments } from "../share";
+import { addSharedComment, anchorFrom, anchorLabel, getShared, getSharedComments, recordShareView } from "../share";
 
 const NAME_KEY = "pq.commentName";
+const PASSCODE_KEY_PREFIX = "pq.passcode.";
 
 const ago = (t) => {
   const s = Math.round((Date.now() - new Date(t).getTime()) / 1000);
@@ -17,9 +18,6 @@ const ago = (t) => {
   return new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 };
 
-// /s/:token — a shared design as a clickable prototype, for anyone with the
-// link. Phone-preview links fill the phone's screen and follow the designer's
-// edits live; share links can also take comments and offer a remix.
 export function SharedView() {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -28,7 +26,11 @@ export function SharedView() {
   const [shared, setShared] = useState(null);
   const [status, setStatus] = useState("loading");
   const [updated, setUpdated] = useState(false);
-  // The "Live preview" badge shows briefly on open, then only after updates.
+  const [passcode, setPasscode] = useState(() => sessionStorage.getItem(PASSCODE_KEY_PREFIX + token) || "");
+  const [passcodeDraft, setPasscodeDraft] = useState("");
+  const [passcodeError, setPasscodeError] = useState(null);
+  const [passcodeBusy, setPasscodeBusy] = useState(false);
+
   const [intro, setIntro] = useState(true);
   useEffect(() => {
     const t = setTimeout(() => setIntro(false), 3500);
@@ -36,17 +38,27 @@ export function SharedView() {
   }, []);
   const rev = useRef(null);
 
-  // Load, then poll for changes while the page is visible: every few seconds
-  // for a phone preview, less often for a share link.
+  // Record visit once per session
+  useEffect(() => {
+    const dev = phone ? "mobile" : window.innerWidth < 1024 ? "tablet" : "desktop";
+    recordShareView(token, dev, document.referrer);
+  }, [token, phone]);
+
+  // Load and poll
   useEffect(() => {
     let live = true;
     let timer;
     const load = async () => {
       try {
-        const next = await getShared(token, rev.current);
+        const next = await getShared(token, rev.current, passcode || null);
         if (!live) return;
         if (!next) {
           setStatus("gone");
+          return;
+        }
+        if (next.protected) {
+          setShared(next);
+          setStatus("locked");
           return;
         }
         if (!next.unchanged) {
@@ -69,26 +81,34 @@ export function SharedView() {
       live = false;
       clearTimeout(timer);
     };
-  }, [token, shared?.kind]);
+  }, [token, shared?.kind, passcode]);
 
+  // Open Graph & Page meta
   useEffect(() => {
-    if (shared?.project?.name) document.title = `${shared.project.name} · Pipsqueak`;
-    const meta = document.createElement("meta");
-    meta.name = "robots";
-    meta.content = "noindex";
-    document.head.appendChild(meta);
-    return () => meta.remove();
-  }, [shared?.project?.name]);
+    if (shared?.project?.name) {
+      document.title = `${shared.project.name} · Pipsqueak`;
+      const desc = shared.project.tagline || `Explore the interactive prototype of ${shared.project.name} designed in Pipsqueak.`;
+      let mDesc = document.querySelector('meta[name="description"]');
+      if (!mDesc) {
+        mDesc = document.createElement("meta");
+        mDesc.name = "description";
+        document.head.appendChild(mDesc);
+      }
+      mDesc.content = desc;
+    }
+  }, [shared?.project?.name, shared?.project?.tagline]);
 
-  // ----- comments -----
+  // ----- comments & threads -----
   const [comments, setComments] = useState([]);
   const [commenting, setCommenting] = useState(false);
   const [showList, setShowList] = useState(false);
   const [draft, setDraft] = useState(null);
+  const [replyParent, setReplyParent] = useState(null);
   const [highlight, setHighlight] = useState(null);
   const [navigateTo, setNavigateTo] = useState(null);
   const [screenId, setScreenId] = useState(null);
   const allow = shared?.allowComments;
+
   useEffect(() => {
     if (!allow) return;
     let live = true;
@@ -103,7 +123,62 @@ export function SharedView() {
 
   const screenName = (id) => shared?.project?.screens?.find((s) => s.id === id)?.name;
 
+  const unlockWithPasscode = async (e) => {
+    e.preventDefault();
+    if (!passcodeDraft.trim() || passcodeBusy) return;
+    setPasscodeBusy(true);
+    setPasscodeError(null);
+    try {
+      const next = await getShared(token, null, passcodeDraft.trim());
+      if (next?.protected) {
+        setPasscodeError("Incorrect passcode. Try again.");
+        return;
+      }
+      if (next?.project) {
+        sessionStorage.setItem(PASSCODE_KEY_PREFIX + token, passcodeDraft.trim());
+        setPasscode(passcodeDraft.trim());
+        setShared(next);
+        setStatus("ok");
+      } else {
+        setStatus("gone");
+      }
+    } catch (err) {
+      setPasscodeError(err.message || "Couldn't unlock prototype.");
+    } finally {
+      setPasscodeBusy(false);
+    }
+  };
+
   if (status === "loading") return <Splash />;
+
+  if (status === "locked") {
+    return (
+      <div className="grid min-h-screen place-items-center bg-paper p-6 text-ink">
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-sm rounded-3xl border border-line bg-surface p-7 text-center shadow-soft">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-sunken text-ink">
+            <Lock size={22} />
+          </div>
+          <h1 className="display mt-4 text-2xl font-bold">{shared?.title || "Protected Design"}</h1>
+          <p className="mt-1.5 text-sm text-mute">This prototype is password protected. Enter the passcode to view it.</p>
+          <form onSubmit={unlockWithPasscode} className="mt-5 space-y-3">
+            <input
+              type="password"
+              autoFocus
+              value={passcodeDraft}
+              onChange={(e) => setPasscodeDraft(e.target.value)}
+              placeholder="Enter passcode"
+              className="h-11 w-full rounded-xl border border-line bg-wash px-3.5 text-center font-mono text-sm tracking-wider text-ink outline-none focus:border-ink"
+            />
+            {passcodeError && <p className="text-xs text-danger">{passcodeError}</p>}
+            <Button type="submit" className="w-full" disabled={!passcodeDraft.trim() || passcodeBusy}>
+              {passcodeBusy ? "Checking…" : "Unlock Prototype"}
+            </Button>
+          </form>
+        </motion.div>
+      </div>
+    );
+  }
+
   if (status === "gone" || status === "error" || !shared?.project) {
     return (
       <Notice
@@ -129,6 +204,17 @@ export function SharedView() {
     navigate(user ? next : `/signin?next=${encodeURIComponent(next)}`);
   };
 
+  // Comments & Threading
+  const parents = comments.filter((c) => !c.parentId);
+  const repliesByParent = new Map();
+  for (const c of comments) {
+    if (c.parentId) {
+      const arr = repliesByParent.get(c.parentId) || [];
+      arr.push(c);
+      repliesByParent.set(c.parentId, arr);
+    }
+  }
+
   const actions = (
     <>
       {allow && (
@@ -143,6 +229,7 @@ export function SharedView() {
             onClick={() => {
               setCommenting((v) => !v);
               setDraft(null);
+              setReplyParent(null);
             }}
             className={cx("inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm", commenting ? "bg-accent text-white" : "hover:bg-white/10")}
           >
@@ -156,6 +243,56 @@ export function SharedView() {
         </button>
       )}
     </>
+  );
+
+  const commentListContent = (
+    <ul className="sb flex-1 divide-y divide-line-soft overflow-y-auto">
+      {parents.length === 0 && (
+        <li className="p-4 text-sm text-mute">No comments yet. Choose Comment, then tap the part of the design you want to talk about.</li>
+      )}
+      {parents.map((c) => {
+        const replies = repliesByParent.get(c.id) || [];
+        return (
+          <li key={c.id} className="p-3">
+            <button
+              onClick={() => {
+                setNavigateTo({ id: c.screenId, n: Date.now() });
+                setHighlight({ screenId: c.screenId, path: c.anchor?.path || null });
+              }}
+              className={cx("w-full rounded-xl p-2 text-left transition-colors hover:bg-wash", c.screenId === screenId && "bg-wash/60")}
+            >
+              <div className="flex items-baseline justify-between gap-2 text-xs">
+                <span className="font-semibold">{c.author}</span>
+                <span className="text-faint">{ago(c.at)}</span>
+              </div>
+              <div className="mt-0.5 text-[11px] text-mute">{anchorLabel(c.anchor, screenName(c.screenId))}</div>
+              <p className="mt-1 whitespace-pre-wrap text-sm">{c.body}</p>
+            </button>
+            {replies.length > 0 && (
+              <div className="mt-2 space-y-1.5 pl-4 border-l-2 border-line-soft">
+                {replies.map((r) => (
+                  <div key={r.id} className="rounded-lg bg-wash/50 p-2 text-xs">
+                    <div className="flex items-baseline justify-between gap-1 text-[11px]">
+                      <span className="font-semibold">{r.author}</span>
+                      <span className="text-faint">{ago(r.at)}</span>
+                    </div>
+                    <p className="mt-0.5 whitespace-pre-wrap text-[13px]">{r.body}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-1.5 pl-2">
+              <button
+                onClick={() => setReplyParent(c)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-mute hover:text-ink"
+              >
+                <CornerDownRight size={11} /> Reply
+              </button>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 
   const overlay = (
@@ -176,27 +313,42 @@ export function SharedView() {
           </motion.div>
         )}
       </AnimatePresence>
+
       {fullBleed && (allow || shared.allowRemix) && (
         <div className="absolute bottom-[max(16px,env(safe-area-inset-bottom))] right-4 z-20 flex gap-2">
           {allow && (
-            <button
-              onClick={() => {
-                setCommenting((v) => !v);
-                setDraft(null);
-              }}
-              aria-label={commenting ? "Stop commenting" : "Comment"}
-              className={cx("flex h-11 items-center gap-1.5 rounded-full px-4 text-sm font-semibold text-white backdrop-blur", commenting ? "bg-accent" : "bg-black/55")}
-            >
-              <MessageSquarePlus size={16} /> {commenting ? "Tap an element" : comments.length || ""}
-            </button>
+            <>
+              <button
+                onClick={() => setShowList((v) => !v)}
+                aria-label="View comments"
+                className="flex h-11 items-center gap-1.5 rounded-full bg-black/60 px-3.5 text-sm font-semibold text-white backdrop-blur"
+              >
+                <MessageCircle size={16} /> {comments.length || ""}
+              </button>
+              <button
+                onClick={() => {
+                  setCommenting((v) => !v);
+                  setDraft(null);
+                  setReplyParent(null);
+                }}
+                aria-label={commenting ? "Stop commenting" : "Comment"}
+                className={cx(
+                  "flex h-11 items-center gap-1.5 rounded-full px-4 text-sm font-semibold text-white backdrop-blur",
+                  commenting ? "bg-accent" : "bg-black/60",
+                )}
+              >
+                <MessageSquarePlus size={16} /> {commenting ? "Tap an element" : "Comment"}
+              </button>
+            </>
           )}
           {shared.allowRemix && (
-            <button onClick={remix} aria-label="Remix" className="flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur">
+            <button onClick={remix} aria-label="Remix" className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur">
               <Shuffle size={16} />
             </button>
           )}
         </div>
       )}
+
       <AnimatePresence>
         {draft && (
           <Composer
@@ -213,6 +365,29 @@ export function SharedView() {
             }}
           />
         )}
+
+        {replyParent && (
+          <Composer
+            key="reply-composer"
+            target={`reply to ${replyParent.author}`}
+            placeholder={`Reply to ${replyParent.author}…`}
+            defaultName={localStorage.getItem(NAME_KEY) || (user ? displayName(user, profile) : "")}
+            onCancel={() => setReplyParent(null)}
+            onPost={async (body, author) => {
+              localStorage.setItem(NAME_KEY, author);
+              const c = await addSharedComment(token, {
+                screenId: replyParent.screenId,
+                anchor: replyParent.anchor,
+                body,
+                author,
+                parentId: replyParent.id,
+              });
+              setComments((list) => [...list, c]);
+              setReplyParent(null);
+            }}
+          />
+        )}
+
         {showList && allow && !fullBleed && (
           <motion.aside
             key="list"
@@ -223,33 +398,32 @@ export function SharedView() {
             aria-label="Comments"
           >
             <div className="flex items-center justify-between border-b border-line px-4 py-3 text-sm font-semibold">
-              Comments
+              <span>Comments & Threads ({comments.length})</span>
               <button onClick={() => setShowList(false)} aria-label="Close comments" className="text-mute hover:text-ink">
                 <X size={15} />
               </button>
             </div>
-            <ul className="sb flex-1 divide-y divide-line-soft overflow-y-auto">
-              {comments.length === 0 && <li className="p-4 text-sm text-mute">No comments yet. Choose Comment, then click the part of the design you want to talk about.</li>}
-              {comments.map((c) => (
-                <li key={c.id}>
-                  <button
-                    onClick={() => {
-                      setNavigateTo({ id: c.screenId, n: Date.now() });
-                      setHighlight({ screenId: c.screenId, path: c.anchor?.path || null });
-                    }}
-                    className={cx("w-full px-4 py-3 text-left hover:bg-wash", c.screenId === screenId && "bg-wash/60")}
-                  >
-                    <div className="flex items-baseline justify-between gap-2 text-xs">
-                      <span className="font-semibold">{c.author}</span>
-                      <span className="text-faint">{ago(c.at)}</span>
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-mute">{anchorLabel(c.anchor, screenName(c.screenId))}</div>
-                    <p className="mt-1 whitespace-pre-wrap text-sm">{c.body}</p>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {commentListContent}
           </motion.aside>
+        )}
+
+        {showList && allow && fullBleed && (
+          <motion.div
+            key="mobile-drawer"
+            initial={{ opacity: 0, y: "100%" }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: "100%" }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="fixed inset-x-0 bottom-0 top-20 z-40 flex flex-col rounded-t-3xl bg-white text-ink shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-line px-5 py-3.5 text-sm font-semibold">
+              <span>Comments ({comments.length})</span>
+              <button onClick={() => setShowList(false)} className="rounded-full bg-wash p-1 text-mute hover:text-ink">
+                <X size={18} />
+              </button>
+            </div>
+            {commentListContent}
+          </motion.div>
         )}
       </AnimatePresence>
     </>
@@ -281,7 +455,7 @@ export function SharedView() {
   );
 }
 
-function Composer({ target, defaultName, onCancel, onPost }) {
+function Composer({ target, placeholder, defaultName, onCancel, onPost }) {
   const [name, setName] = useState(defaultName || "");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -314,7 +488,7 @@ function Composer({ target, defaultName, onCancel, onPost }) {
         onChange={(e) => setBody(e.target.value)}
         maxLength={1000}
         rows={3}
-        placeholder="What should change here?"
+        placeholder={placeholder || "What should change here?"}
         aria-label="Comment"
         className="w-full resize-none rounded-xl border border-line px-3 py-2 text-[15px] outline-none focus:border-ink"
       />

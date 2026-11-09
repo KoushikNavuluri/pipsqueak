@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, Link2, LoaderCircle, MessageSquarePlus, RotateCcw, Trash2, Wand } from "lucide-react";
+import { Check, CornerDownRight, Link2, LoaderCircle, MessageSquare, MessageSquarePlus, RotateCcw, Trash2, Undo2, Wand } from "lucide-react";
 import { Button, cx } from "../../ui";
-import { anchorLabel, deleteComment, listComments, setResolved, watchComments } from "../../share";
+import { addComment, anchorLabel, deleteComment, listComments, setResolved, watchComments } from "../../share";
 
 const ago = (t) => {
   const s = Math.round((Date.now() - new Date(t).getTime()) / 1000);
@@ -11,7 +11,6 @@ const ago = (t) => {
   return new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 };
 
-// A design's comments, kept current: new ones from share links arrive live.
 export function useComments(projectId, onError) {
   const [comments, setComments] = useState(null);
   const reload = useCallback(
@@ -30,7 +29,6 @@ export function useComments(projectId, onError) {
     const stop = watchComments(projectId, reload);
     const onFocus = () => reload();
     addEventListener("focus", onFocus);
-    // Also check now and then, for networks that block live updates.
     const poll = setInterval(() => document.visibilityState === "visible" && reload(), 30000);
     return () => {
       stop();
@@ -41,9 +39,6 @@ export function useComments(projectId, onError) {
   return { comments: comments || [], loading: comments === null, reload, setComments };
 }
 
-// The instruction Pip gets for comments that apply to a whole screen (or
-// whose element is gone). Comments on an element are sent as edits of that
-// element instead.
 export function commentsInstruction(list, screenName) {
   const lines = list.map((c, i) => {
     const a = c.anchor || {};
@@ -53,7 +48,7 @@ export function commentsInstruction(list, screenName) {
   return `Resolve these review comments on the ${screenName} screen. Make the change each comment asks for, keep everything else on the screen as it is, and stay within the design system. Return the complete screen.\n${lines.join("\n")}`;
 }
 
-function Composer({ target, onPost, onCancel }) {
+function Composer({ target, placeholder, onPost, onCancel, autoFocus = true, compact = false }) {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const submit = async (e) => {
@@ -68,10 +63,10 @@ function Composer({ target, onPost, onCancel }) {
     }
   };
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-ink/80 bg-surface p-3 shadow-soft">
-      <div className="mb-2 truncate text-xs text-mute">On {target}</div>
+    <form onSubmit={submit} className={cx("rounded-2xl border border-ink/80 bg-surface p-3 shadow-soft", compact && "p-2.5")}>
+      {target && <div className="mb-2 truncate text-xs text-mute">On {target}</div>}
       <textarea
-        autoFocus
+        autoFocus={autoFocus}
         value={body}
         onChange={(e) => setBody(e.target.value)}
         onKeyDown={(e) => {
@@ -79,8 +74,8 @@ function Composer({ target, onPost, onCancel }) {
           if (e.key === "Escape") onCancel?.();
         }}
         maxLength={1000}
-        rows={3}
-        placeholder="Leave a note for yourself or Pip…"
+        rows={compact ? 2 : 3}
+        placeholder={placeholder || "Leave a note for yourself or Pip…"}
         aria-label="Comment"
         className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-faint"
       />
@@ -91,7 +86,7 @@ function Composer({ target, onPost, onCancel }) {
           </Button>
         )}
         <Button type="submit" size="sm" disabled={!body.trim() || busy}>
-          {busy ? "Posting…" : "Comment"}
+          {busy ? "Posting…" : compact ? "Reply" : "Comment"}
         </Button>
       </div>
     </form>
@@ -102,11 +97,27 @@ export function CommentsPanel({ project, state, target, focusId, onPost, onCance
   const { comments, loading, setComments } = state;
   const [showResolved, setShowResolved] = useState(false);
   const [working, setWorking] = useState(null);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [lastDeleted, setLastDeleted] = useState(null);
+
   const screenName = (id) => project.screens.find((sc) => sc.id === id)?.name;
-  const open = comments.filter((c) => !c.resolved_at);
-  const resolved = comments.filter((c) => c.resolved_at);
-  const number = new Map(open.map((c, i) => [c.id, i + 1]));
-  const actionable = open.filter((c) => project.screens.some((sc) => sc.id === c.screen_id && sc.html));
+
+  // Threading: parent comments vs replies
+  const parents = comments.filter((c) => !c.parent_id);
+  const repliesByParent = new Map();
+  for (const c of comments) {
+    if (c.parent_id) {
+      const arr = repliesByParent.get(c.parent_id) || [];
+      arr.push(c);
+      repliesByParent.set(c.parent_id, arr);
+    }
+  }
+
+  const openParents = parents.filter((c) => !c.resolved_at);
+  const resolvedParents = parents.filter((c) => c.resolved_at);
+  const number = new Map(openParents.map((c, i) => [c.id, i + 1]));
+
+  const actionable = openParents.filter((c) => project.screens.some((sc) => sc.id === c.screen_id && sc.html));
   const screensToFix = new Set(actionable.map((c) => c.screen_id)).size;
 
   const act = async (key, fn) => {
@@ -119,22 +130,76 @@ export function CommentsPanel({ project, state, target, focusId, onPost, onCance
       setWorking(null);
     }
   };
-  const resolve = (c, by) =>
-    act(c.id, async () => {
-      await setResolved([c.id], by);
-      setComments((list) => list.map((x) => (x.id === c.id ? { ...x, resolved_at: by ? new Date().toISOString() : null, resolved_by: by || null } : x)));
-    });
-  const remove = (c) =>
-    act(c.id, async () => {
-      await deleteComment(c.id);
-      setComments((list) => list.filter((x) => x.id !== c.id));
+
+  const resolveThread = (parent, by) =>
+    act(parent.id, async () => {
+      const replies = repliesByParent.get(parent.id) || [];
+      const ids = [parent.id, ...replies.map((r) => r.id)];
+      await setResolved(ids, by);
+      setComments((list) =>
+        list.map((x) =>
+          ids.includes(x.id) ? { ...x, resolved_at: by ? new Date().toISOString() : null, resolved_by: by || null } : x,
+        ),
+      );
     });
 
-  const Item = ({ c }) => (
-    <li id={`comment-${c.id}`} className={cx("rounded-xl border p-3 transition-colors", focusId === c.id ? "border-accent bg-accent-soft/40" : "border-line")}>
+  const removeComment = (c) =>
+    act(c.id, async () => {
+      const backup = { ...c };
+      await deleteComment(c.id);
+      setComments((list) => list.filter((x) => x.id !== c.id && x.parent_id !== c.id));
+      setLastDeleted(backup);
+      setTimeout(() => setLastDeleted((cur) => (cur?.id === backup.id ? null : cur)), 6000);
+    });
+
+  const undoDelete = async () => {
+    if (!lastDeleted) return;
+    const backup = lastDeleted;
+    setLastDeleted(null);
+    try {
+      const restored = await addComment({
+        projectId: backup.project_id,
+        screenId: backup.screen_id,
+        anchor: backup.anchor,
+        body: backup.body,
+        authorName: backup.author_name,
+        authorId: backup.author_id,
+        parentId: backup.parent_id,
+      });
+      setComments((list) => [...list, restored]);
+      onToast?.("Comment restored");
+    } catch (err) {
+      onToast?.("Couldn't restore comment", "error");
+    }
+  };
+
+  const postReply = async (parentId, body) => {
+    const parent = comments.find((c) => c.id === parentId);
+    if (!parent) return;
+    const author = "You";
+    const res = await addComment({
+      projectId: parent.project_id,
+      screenId: parent.screen_id,
+      anchor: parent.anchor,
+      body,
+      authorName: author,
+      authorId: parent.author_id,
+      parentId,
+    });
+    setComments((list) => [...list, res]);
+    setReplyingTo(null);
+  };
+
+  const Item = ({ c, isReply = false }) => (
+    <div id={`comment-${c.id}`} className={cx("transition-colors", isReply ? "mt-2 pl-3 border-l-2 border-line-soft" : "")}>
       <button onClick={() => onGo(c)} className="block w-full text-left">
         <div className="flex items-baseline gap-2 text-xs">
-          {!c.resolved_at && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">{number.get(c.id)}</span>}
+          {!c.resolved_at && !isReply && (
+            <span className="grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+              {number.get(c.id)}
+            </span>
+          )}
+          {isReply && <CornerDownRight size={11} className="text-mute" />}
           <span className="font-semibold">{c.author_name}</span>
           {c.source === "share" && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-sunken px-1.5 py-0.5 text-[10px] font-medium text-mute" title="Left through your share link">
@@ -143,33 +208,69 @@ export function CommentsPanel({ project, state, target, focusId, onPost, onCance
           )}
           <span className="ml-auto shrink-0 text-faint">{ago(c.created_at)}</span>
         </div>
-        <div className="mt-1 truncate text-[11px] text-mute">{anchorLabel(c.anchor, screenName(c.screen_id) || "a deleted screen")}</div>
+        {!isReply && (
+          <div className="mt-1 truncate text-[11px] text-mute">{anchorLabel(c.anchor, screenName(c.screen_id) || "a deleted screen")}</div>
+        )}
         <p className="mt-1 whitespace-pre-wrap break-words text-sm">{c.body}</p>
         {c.resolved_at && <div className="mt-1 text-[11px] text-faint">Resolved{c.resolved_by ? ` by ${c.resolved_by}` : ""}</div>}
       </button>
-      <div className="mt-2 flex gap-1.5">
-        {c.resolved_at ? (
-          <button onClick={() => resolve(c, null)} disabled={!!working} className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold hover:border-ink disabled:opacity-40">
-            <RotateCcw size={11} /> Reopen
-          </button>
-        ) : (
+
+      <div className="mt-2 flex items-center gap-1.5">
+        {!isReply && (
           <>
-            <button onClick={() => resolve(c, "You")} disabled={!!working} className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold hover:border-ink disabled:opacity-40">
-              <Check size={11} /> Resolve
-            </button>
-            {screenName(c.screen_id) && (
-              <button onClick={() => act("pip", () => onAskPip([c]))} disabled={!!working} className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold hover:border-ink disabled:opacity-40">
-                <Wand size={11} /> Ask Pip
+            {c.resolved_at ? (
+              <button onClick={() => resolveThread(c, null)} disabled={!!working} className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold hover:border-ink disabled:opacity-40">
+                <RotateCcw size={11} /> Reopen thread
               </button>
+            ) : (
+              <>
+                <button onClick={() => resolveThread(c, "You")} disabled={!!working} className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold hover:border-ink disabled:opacity-40">
+                  <Check size={11} /> Resolve
+                </button>
+                <button onClick={() => setReplyingTo((cur) => (cur === c.id ? null : c.id))} className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold hover:border-ink">
+                  <MessageSquare size={11} /> Reply
+                </button>
+                {screenName(c.screen_id) && (
+                  <button onClick={() => act("pip", () => onAskPip([c]))} disabled={!!working} className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs font-semibold hover:border-ink disabled:opacity-40">
+                    <Wand size={11} /> Ask Pip
+                  </button>
+                )}
+              </>
             )}
           </>
         )}
-        <button onClick={() => remove(c)} disabled={!!working} aria-label="Delete comment" className="ml-auto rounded-md p-1 text-faint hover:text-danger disabled:opacity-40">
+        <button onClick={() => removeComment(c)} disabled={!!working} aria-label="Delete comment" className="ml-auto rounded-md p-1 text-faint hover:text-danger disabled:opacity-40">
           <Trash2 size={13} />
         </button>
       </div>
-    </li>
+    </div>
   );
+
+  const Thread = ({ parent }) => {
+    const replies = repliesByParent.get(parent.id) || [];
+    return (
+      <li className={cx("rounded-xl border p-3 transition-colors", focusId === parent.id ? "border-accent bg-accent-soft/40" : "border-line")}>
+        <Item c={parent} />
+        {replies.length > 0 && (
+          <div className="mt-2 space-y-2">
+            {replies.map((rep) => (
+              <Item key={rep.id} c={rep} isReply />
+            ))}
+          </div>
+        )}
+        {replyingTo === parent.id && (
+          <div className="mt-3 pl-3">
+            <Composer
+              compact
+              placeholder={`Reply to ${parent.author_name}…`}
+              onPost={(text) => postReply(parent.id, text)}
+              onCancel={() => setReplyingTo(null)}
+            />
+          </div>
+        )}
+      </li>
+    );
+  };
 
   return (
     <div className="sb flex h-full flex-col overflow-y-auto p-4">
@@ -179,20 +280,37 @@ export function CommentsPanel({ project, state, target, focusId, onPost, onCance
         <div className="flex items-start gap-2.5 rounded-2xl bg-wash p-3 text-xs text-mute">
           <MessageSquarePlus size={15} className="mt-0.5 shrink-0 text-ink-2" />
           <span>
-            Choose the comment tool (<b>C</b>) and click any element to pin a note to it. People you share a link with can comment too.
+            Choose the comment tool (<b>C</b>) and click any element to pin a note. Leave replies and resolve threads directly.
           </span>
         </div>
       )}
 
-      {open.length > 0 && (
+      {lastDeleted && (
+        <div className="mt-3 flex items-center justify-between rounded-xl bg-ink px-3 py-2 text-xs text-white shadow-soft">
+          <span>Comment deleted</span>
+          <button onClick={undoDelete} className="inline-flex items-center gap-1 font-semibold text-accent hover:underline">
+            <Undo2 size={12} /> Undo
+          </button>
+        </div>
+      )}
+
+      {openParents.length > 0 && (
         <div className="mt-4 rounded-2xl border border-line p-3">
           <div className="text-sm font-semibold">
-            {open.length} open comment{open.length === 1 ? "" : "s"}
+            {openParents.length} open thread{openParents.length === 1 ? "" : "s"}
           </div>
           <p className="mt-0.5 text-xs text-mute">
-            {screensToFix ? `Pip reworks ${screensToFix} screen${screensToFix === 1 ? "" : "s"} to address them (about ${screensToFix} credit${screensToFix === 1 ? "" : "s"}) and resolves the ones it handled.` : "None of them are on a screen Pip can edit."}
+            {screensToFix
+              ? `Pip reworks ${screensToFix} screen${screensToFix === 1 ? "" : "s"} to address them and resolves what it handled.`
+              : "None of them are on a screen Pip can edit."}
           </p>
-          <Button size="sm" icon={working === "pip" ? LoaderCircle : Wand} className="mt-2.5" disabled={!!working || !screensToFix} onClick={() => act("pip", () => onAskPip(actionable))}>
+          <Button
+            size="sm"
+            icon={working === "pip" ? LoaderCircle : Wand}
+            className="mt-2.5"
+            disabled={!!working || !screensToFix}
+            onClick={() => act("pip", () => onAskPip(actionable))}
+          >
             {working === "pip" ? "Pip is on it…" : "Ask Pip to resolve all"}
           </Button>
         </div>
@@ -202,21 +320,21 @@ export function CommentsPanel({ project, state, target, focusId, onPost, onCance
         <LoaderCircle size={16} className="mx-auto mt-6 animate-spin text-mute" />
       ) : (
         <>
-          <ul className="mt-4 grid gap-2">
-            {open.map((c) => (
-              <Item key={c.id} c={c} />
+          <ul className="mt-4 grid gap-3">
+            {openParents.map((c) => (
+              <Thread key={c.id} parent={c} />
             ))}
           </ul>
-          {!open.length && <p className="mt-4 text-center text-sm text-mute">No open comments.</p>}
-          {resolved.length > 0 && (
+          {!openParents.length && <p className="mt-4 text-center text-sm text-mute">No open comments.</p>}
+          {resolvedParents.length > 0 && (
             <div className="mt-5">
               <button onClick={() => setShowResolved((v) => !v)} className="text-xs font-semibold text-mute hover:text-ink">
-                {showResolved ? "Hide" : "Show"} {resolved.length} resolved
+                {showResolved ? "Hide" : "Show"} {resolvedParents.length} resolved thread{resolvedParents.length === 1 ? "" : "s"}
               </button>
               {showResolved && (
-                <ul className="mt-2 grid gap-2 opacity-80">
-                  {resolved.map((c) => (
-                    <Item key={c.id} c={c} />
+                <ul className="mt-2 grid gap-3 opacity-80">
+                  {resolvedParents.map((c) => (
+                    <Thread key={c.id} parent={c} />
                   ))}
                 </ul>
               )}

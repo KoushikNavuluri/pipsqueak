@@ -24,6 +24,7 @@ import { displayName, useSession } from "../session";
 import { addComment, anchorFrom, anchorLabel, setResolved } from "../share";
 import { CommentsPanel, commentsInstruction, useComments } from "./panels/CommentsPanel";
 import { ShareDialog } from "./ShareDialog";
+import { NotificationBell } from "../components/NotificationBell";
 import { useProject, useStore } from "../store";
 import { Logo, PipGlyph } from "../brand";
 import { Button, IconButton, Segmented, cx } from "../ui";
@@ -543,6 +544,7 @@ export function CanvasStudio() {
           <Button variant="secondary" size="sm" icon={Share2} aria-label="Share" onClick={() => setSharing("link")}>
             <span className="hidden sm:inline">Share</span>
           </Button>
+          <NotificationBell />
           <Button variant="secondary" size="sm" icon={Play} className="ml-1" aria-label="Play" onClick={() => setPresent(selection?.screenId || project.screens[0]?.id)}>
             <span className="hidden sm:inline">Play</span>
           </Button>

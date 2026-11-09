@@ -194,3 +194,74 @@ npm run dev
 export function tokensFile(project) {
   return tokensCss(project.system);
 }
+
+export async function renderScreenPng(screen, system, kit, width = 390, height = 844) {
+  if (typeof document === "undefined") {
+    return new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" });
+  }
+  const doc = buildFrameDoc({ html: screen.html, system, kit, mode: "export", width });
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.top = "-9999px";
+  iframe.style.left = "-9999px";
+  iframe.style.width = `${width}px`;
+  iframe.style.height = `${height}px`;
+  iframe.style.border = "0";
+  iframe.style.visibility = "hidden";
+  document.body.appendChild(iframe);
+
+  try {
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+    iframeDoc.open();
+    iframeDoc.write(doc);
+    iframeDoc.close();
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width * 2;
+    canvas.height = height * 2;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" });
+    }
+    ctx.scale(2, 2);
+
+    const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+      <foreignObject width="100%" height="100%">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;">
+          ${iframeDoc.documentElement.innerHTML}
+        </div>
+      </foreignObject>
+    </svg>`;
+
+    const img = new Image();
+    const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
+
+    const blob = await new Promise((resolve) => {
+      img.onload = () => {
+        ctx.fillStyle = system?.colors?.bg || "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        canvas.toBlob((b) => resolve(b || new Blob([], { type: "image/png" })), "image/png");
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        ctx.fillStyle = system?.colors?.bg || "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.fillStyle = system?.colors?.ink || "#000000";
+        ctx.font = "20px system-ui";
+        ctx.fillText(screen.name || "Screen", 24, 48);
+        canvas.toBlob((b) => resolve(b || new Blob([], { type: "image/png" })), "image/png");
+      };
+      img.src = url;
+    });
+
+    return blob;
+  } finally {
+    iframe.remove();
+  }
+}
+

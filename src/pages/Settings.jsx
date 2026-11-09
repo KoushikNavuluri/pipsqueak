@@ -294,7 +294,20 @@ function PreferencesSection() {
       <Row title="Calm motion" description="Fewer animations throughout the app.">
         <Switch on={!!prefs.reduce} onChange={(reduce) => api.pref({ reduce })} label="Calm motion" />
       </Row>
+      <Row title="Email alerts for comments" description="Receive email notifications when someone comments on your share links.">
+        <Switch on={prefs.emailAlerts !== false} onChange={(emailAlerts) => api.pref({ emailAlerts })} label="Email alerts" />
+      </Row>
+      <Row title="Custom Email Provider (Optional)" description="Add your Resend API key to deliver transactional comment alerts directly.">
+        <input
+          type="password"
+          value={prefs.resendKey || ""}
+          onChange={(e) => api.pref({ resendKey: e.target.value.trim() })}
+          placeholder="re_..."
+          className="h-9 w-48 rounded-xl border border-line bg-surface px-3 font-mono text-xs outline-none focus:border-ink"
+        />
+      </Row>
     </Panel>
+
   );
 }
 
