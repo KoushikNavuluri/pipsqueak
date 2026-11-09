@@ -745,7 +745,7 @@ function Step({ s, ctx }) {
   const imgH = hasImg ? Math.round(H * 0.34) : 0;
   return (
     <>
-      <Fit style={{ position: "absolute", left: P, right: P, top: 160, bottom: hasImg ? imgH + 70 : 140 }} align={hasImg ? "start" : "center"}>
+      <Fit style={{ position: "absolute", left: P, right: P, top: 160, bottom: hasImg ? imgH + (st.frame === "bleed" ? 0 : 110) + 44 : 140 }} align={hasImg ? "start" : "center"}>
         <div style={{ marginBottom: fs(36), display: "flex" }}>
           <Num n={stepNo} st={st} pal={pal} size={hasImg ? 170 : 230} />
         </div>

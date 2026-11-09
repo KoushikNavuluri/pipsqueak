@@ -100,6 +100,7 @@ export function CarouselCreate({ onClose, initialTopic = "" }) {
   const [tone, setTone] = useState("");
   const [goal, setGoal] = useState("");
   const [extra, setExtra] = useState("");
+  const [images, setImages] = useState("");
   const [format, setFormat] = useState("4:5");
   const [licensed, setLicensed] = useState(false);
   const [plan, setPlan] = useState(null);
@@ -126,7 +127,7 @@ export function CarouselCreate({ onClose, initialTopic = "" }) {
     licensed,
     quality: s.data.prefs.aiQuality,
     variations: mode === "auto" ? 3 : variations,
-    custom: mode === "auto" ? {} : { slides: autoSlides ? 0 : slides, styles, tone, goal, extra: extra.trim() },
+    custom: mode === "auto" ? {} : { slides: autoSlides ? 0 : slides, styles, tone, goal, extra: extra.trim(), images },
   });
 
   const makePlan = async () => {
@@ -317,6 +318,20 @@ export function CarouselCreate({ onClose, initialTopic = "" }) {
                                 </button>
                               ))}
                             </div>
+                          </Field>
+                          <Field label="Images">
+                            <Segmented
+                              id="car-images"
+                              size="sm"
+                              value={images}
+                              onChange={setImages}
+                              options={[
+                                { value: "", label: "Pip decides" },
+                                { value: "most", label: "Most slides" },
+                                { value: "some", label: "A few" },
+                                { value: "none", label: "Text only" },
+                              ]}
+                            />
                           </Field>
                           <Field label="Goal">
                             <Segmented id="car-goal" size="sm" value={goal} onChange={setGoal} options={GOALS} />

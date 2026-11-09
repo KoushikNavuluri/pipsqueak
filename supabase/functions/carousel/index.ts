@@ -162,6 +162,9 @@ function candidateFrom(v: any): Candidate {
   };
 }
 
+// The user's image choice in a custom setup, mapped to an image approach.
+const IMAGE_CHOICE: Record<string, string> = { most: "photo_led", some: "photo_accents", none: "type_only", illustrated: "illustrated" };
+
 // ---------- Actions ----------
 
 async function plan(b: any, taste: string) {
@@ -173,7 +176,7 @@ async function plan(b: any, taste: string) {
   const request = {
     ...base,
     variations,
-    custom: { slides, styles, tone: str(custom.tone, 80), goal: str(custom.goal, 20), extra: str(custom.extra, 400) },
+    custom: { slides, styles, tone: str(custom.tone, 80), goal: str(custom.goal, 20), extra: str(custom.extra, 400), images: IMAGE_CHOICE[custom.images] ? custom.images : "" },
     taste,
   };
   const result = await generateJson(pickModels(b.quality), requestBody(PLAN_SYSTEM, [{ text: planRequestText(request) }], planSchema, 0.9));
@@ -182,7 +185,12 @@ async function plan(b: any, taste: string) {
   let directions = (Array.isArray(d.directions) ? d.directions : []).slice(0, variations).map((x: any, i: number) => cleanDirection(x, i, recommended));
   if (!directions.length) throw new HttpError(502, "Pip couldn't plan this one. Try again.");
   // The user's choices win over the model's.
-  directions = directions.map((x: any, i: number) => ({ ...x, ...(slides ? { slideCount: slides } : {}), ...(styles[i] ? { style: styles[i] } : {}) }));
+  const images = IMAGE_CHOICE[custom.images] ?? null;
+  directions = directions.map((x: any, i: number) => ({ ...x, ...(slides ? { slideCount: slides } : {}), ...(styles[i] ? { style: styles[i] } : {}), ...(images ? { imageApproach: images } : {}) }));
+  // Without an explicit choice, never return only text-only designs.
+  if (!images && directions.length > 1 && directions.every((x: any) => x.imageApproach === "type_only")) {
+    directions = directions.map((x: any, i: number) => (i === directions.length - 1 ? x : { ...x, imageApproach: i === 0 ? "photo_led" : "photo_accents" }));
+  }
   return {
     out: {
       title: str(d.title, 60) || base.topic.slice(0, 60),

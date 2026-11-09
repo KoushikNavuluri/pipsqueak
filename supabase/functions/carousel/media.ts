@@ -35,6 +35,8 @@ const WATERMARKED = /(shutterstock|istockphoto|gettyimages|alamy|dreamstime|depo
 // Sites that mostly serve AI-generated stock, templates or mockups.
 const SYNTHETIC = /(lummi\.ai|stockcake|freepik|pngtree|vecteezy|lexica\.art|openart\.ai|nightcafe|civitai|playground(ai)?\.com|craiyon|starryai|deepai|imagine\.art|aiartists|stablediffusionweb|wallpapers?\.ai|getimg\.ai|pixlr|mockup|templatemonster|envato|creativemarket|graphicriver|rawpixel)/i;
 
+const AI_AUTHOR = /(ai[- ]generated|generated (by|with|for)|midjourney|dall[·-]?e|stable diffusion|meta ai|chatgpt|gemini|imagen|firefly|muse spark|flux)/i;
+
 const decode = (s: string) =>
   s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
@@ -238,6 +240,8 @@ export async function searchWikimedia(query: string): Promise<Candidate[]> {
       if (!info?.thumburl || !/^image\/(jpeg|png|webp)$/.test(info.mime || "")) continue;
       if (Math.min(info.width || 0, info.height || 0) < 1000) continue;
       const meta = info.extmetadata || {};
+      // Commons hosts AI-generated images too; their author line says so.
+      if (AI_AUTHOR.test(`${stripTags(meta.Artist?.value || "")} ${p.title || ""}`)) continue;
       out.push({
         id: `wikimedia:${p.pageid}`,
         source: "wikimedia",
@@ -309,6 +313,14 @@ export async function findCandidates(need: { query: string; altQuery?: string; k
     seen.add(c.id);
     merged.push(c);
   };
+  // Named things: trusted publishers and official sites first, and sizes that
+  // image generators use (1024², 1536×1024…) last; blogs often illustrate
+  // news with generated art.
+  const AI_SIZES = new Set(["1024x1024", "1536x1024", "1024x1536", "1792x1024", "1024x1792", "1344x768", "768x1344"]);
+  const TRUSTED = /(^|\.)(meta\.com|about\.fb\.com|fb\.com|apple\.com|google\.com|microsoft\.com|theverge\.com|techcrunch\.com|engadget\.com|cnet\.com|wired\.com|reuters\.com|apnews\.com|bloomberg\.com|nytimes\.com|bbc\.(com|co\.uk)|cnbc\.com|tomsguide\.com|zdnet\.com|arstechnica\.com|businessinsider\.com|nasa\.gov|wikipedia\.org|wikimedia\.org)$/i;
+  const score = (c: Candidate) => (TRUSTED.test(c.credit || "") ? 0 : 1) + (AI_SIZES.has(`${c.width}x${c.height}`) ? 2 : 0);
+  if (need.kind === "entity") web.sort((a, b) => score(a) - score(b));
+  else web.sort((a, b) => (AI_SIZES.has(`${a.width}x${a.height}`) ? 1 : 0) - (AI_SIZES.has(`${b.width}x${b.height}`) ? 1 : 0));
   for (let i = 0; merged.length < limit * 2 && (i < web.length || i < extra.length); i++) {
     if (need.kind === "entity" || licensed) add(extra[i]);
     add(web[i]);

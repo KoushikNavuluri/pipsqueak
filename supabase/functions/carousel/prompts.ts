@@ -90,6 +90,7 @@ YOUR JOB
 4. Create the requested number of creative directions. They must be genuinely different: each uses a different style id, a different hook mechanism and, where the topic allows it, a different framework (the same 7 tips can be a listicle, one person's story, a myth vs fact run or a contrarian take). Vary the image approach too. Never two directions that differ only in colors. Each must suit the topic; skip styles that don't fit it.
 5. For each direction choose a palette. Rules: ink on bg contrast at least 7:1; accent readable on bg or used as a fill behind onAccent text; colors fit the style (noir is dark, editorial is warm paper or deep ink, swiss is mostly white or black). Use 6-digit hex.
 6. imageApproach: photo_led (real photos on most slides), photo_accents (2–4 photos), type_only (typography carries it, at most a cover photo), illustrated (painted illustrations, only when the topic is abstract and photos would be generic).
+   Real images make carousels feel authentic and stop the scroll. Default to photo_led or photo_accents. Use type_only for at most one direction, and never when the topic is about a specific real product, brand, company, person, place or event: then every direction is photo_led or photo_accents and shows the real thing.
 
 When the user gave constraints (count of directions, slide count, style, tone, format), follow them exactly.
 
@@ -141,6 +142,7 @@ export function planRequestText(b: any) {
     c.styles?.length ? `Use these styles, in this order: ${c.styles.join(", ")}` : "",
     c.tone ? `Tone: ${c.tone}` : "",
     c.goal ? `Goal: ${c.goal}` : "",
+    c.images ? `Images: ${({ most: "real photos on most slides (photo_led)", some: "a few real photos (photo_accents)", none: "text only (type_only)", illustrated: "illustrations" } as Record<string, string>)[c.images]} for every direction` : "",
     c.extra ? `Other requirements: ${c.extra}` : "",
     b.taste || "",
   ];
@@ -168,6 +170,8 @@ IMAGE BRIEFS (for slides with image.use true)
 - query: 2–6 plain English words describing a photographable scene, as a photo editor would search: subject + setting + mood. "barista pouring latte art close up", not "coffee success".
 - altQuery: a second, different search for the same need.
 - kind: entity when the slide is about one specific real, named thing (a person, place, building, product, artwork, event); photo for a generic scene; texture for a background mood; illustration only for the illustrated approach.
+- When the carousel is about a named product, brand, company or person, every query names it ("Meta Muse app", "Meta Ray-Ban Display glasses", "Mark Zuckerberg Connect keynote") and uses kind entity, so the photos show the real thing: official product images, launch photos, the app on a phone, the people involved. For a use-case slide, search for the product doing that thing or the partner it uses ("Meta Muse shopping", "Expedia app on phone").
+- With image approach photo_led, give most slides an image (cover, photo, split and step slides all show one); with photo_accents, 2–4 slides.
 - Real people only when they are public figures named in the content.
 - Avoid queries that bring back stock-photo clichés (handshakes, people pointing at screens, lightbulbs, puzzle pieces).
 
@@ -232,8 +236,9 @@ A GOOD PICK
 - Matches the other picks so the carousel feels consistent in color temperature and mood.
 
 REJECT
-- Watermarks, stock-agency marks, visible logos that aren't the subject, big blocks of text, memes, screenshots, collages, borders, low resolution, clip-art and anything off-topic.
-- Device and print mockups, templates, and screens showing placeholder or marketing text.
+- Watermarks, stock-agency marks, visible logos that aren't the subject, big blocks of text, memes, collages, borders, low resolution, clip-art and anything off-topic.
+- Device and print mockups and templates with placeholder text.
+- Exception: when the slide is about a specific real product, brand or person, official product shots, launch and press photos, the real app on a phone or screen, and the product's own logo are exactly right. Prefer them over generic scenes, and reject look-alikes of a different product.
 - AI-generated images. Tells: garbled or invented letters and numbers (on cards, signs, screens, books), warped hands or faces, melted details, plastic-smooth skin, impossible reflections, over-perfect cinematic glow. When in doubt, reject.
 - Using the same or a near-identical image on two slides.
 
