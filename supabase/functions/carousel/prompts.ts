@@ -13,14 +13,22 @@ const O = (properties: Record<string, unknown>, required = Object.keys(propertie
 });
 
 export const STYLES: Record<string, string> = {
-  editorial: "Magazine feature: serif display headlines, warm paper, a full-bleed photo cover, pull quotes, thin rules, folio numbers. Fits culture, travel, food, essays, personal stories, premium brands.",
-  bold: "Loud kinetic type: huge condensed uppercase headlines, saturated color fields, highlighter words, sticker badges. Fits hot takes, myth-busting, motivation, marketing and creator tips.",
-  swiss: "Minimal Swiss grid: neutral sans, generous white space, one sharp accent, huge numerals, hairline grid. Fits frameworks, productivity, design, B2B, finance, careers.",
-  noir: "Dark tech: near-black with a glowing gradient, glass cards, geometric sans, mono labels. Fits AI, startups, code, security, gaming, the future.",
-  documentary: "Photo-led documentary: a real photograph on nearly every slide, darkened, with text in captions and lower thirds, light film grain. Fits news, history, places, people, sport, social causes.",
-  notebook: "Handwritten notebook: lined paper, marker highlights, a handwritten accent font, taped polaroid photos, doodled arrows. Fits learning, study tips, personal lessons, wellness, simple how-tos.",
-  data: "Data poster: big statistics, bar meters, mono numerals, tight grid, chart-like composition. Fits research findings, money, growth, comparisons, survey results.",
-  collage: "Cut-paper collage: tilted photo cut-outs, paper shapes, stickers, playful grotesk type, mixed scale. Fits fashion, lifestyle, food, culture, Gen-Z audiences, brand storytelling.",
+  editorial: "Magazine feature: serif display headlines, warm paper, a full-bleed photo cover, photo bands, pull quotes, thin rules, folio numbers. Fits culture, travel, food, essays, personal stories, premium brands.",
+  magazine: "Fashion-magazine cover: a huge Bodoni masthead over a full-bleed photo with cover lines, then white pages with side photo columns and red italic accents. Fits fashion, beauty, celebrities, culture, lifestyle, interviews, launches.",
+  minimal: "Quiet and airy: centered light sans, generous white space, small framed photos, one muted accent, progress dots. Fits wellness, mindfulness, design, productivity, slow living, premium simplicity.",
+  swiss: "Swiss grid: left-aligned heavy sans, hairline grid, a photo band under the headline, huge numerals, one sharp accent. Fits frameworks, how-tos, design, B2B, careers.",
+  corporate: "Business deck: white rounded cards on a cool grey-blue background, brand bar with monogram, photos in side columns, numbered pills, progress bar. Fits B2B, SaaS, consulting, finance, HR, company updates, LinkedIn.",
+  data: "Data poster: dark navy, dot grid, photo band on top with figure labels, mono numerals, big statistics and meters. Fits research findings, money, growth, comparisons, survey results.",
+  noir: "Dark tech: near-black with glowing gradients, rounded glowing photo frames, mono labels, gradient highlights. Fits AI, startups, code, security, gaming, the future.",
+  gradient: "Gradient glass: vivid violet-pink-blue mesh, frosted glass cards, photos inside glass cards, centered geometric type. Fits apps, creators, music, Gen-Z products, launches, social media tips.",
+  bold: "Loud kinetic type: huge condensed uppercase headlines, saturated flat color fields, highlighter words, photo cut-outs with hard shadows. Fits hot takes, myth-busting, motivation, marketing tips.",
+  brutalist: "Brutalist poster: giant black uppercase headlines filling the slide, thick black borders and boxes, black-and-white boxed photos, mono body text, one hot accent. Fits contrarian takes, tech, design critiques, manifestos, streetwear.",
+  retro: "70s retro: cream background with sunburst rays, fat rounded display type, photos in rounded frames with an offset color block, round number badges. Fits food, travel, music, nostalgia, small businesses, fun explainers.",
+  collage: "Cut-paper collage: tilted photo prints, paper shapes, sticker highlights, playful grotesk type. Fits fashion, lifestyle, food, culture, Gen-Z audiences, brand storytelling.",
+  notebook: "Handwritten notebook: lined paper, marker highlights, handwritten labels, taped polaroid photos. Fits learning, study tips, personal lessons, wellness, simple how-tos.",
+  aesthetic: "Soft aesthetic: pastel blush gradients, arched and round photos, elegant serif with italic accents, centered layout. Fits beauty, skincare, home, weddings, self-care, slow living, feminine brands.",
+  luxury: "Luxury: deep emerald or black with a gold hairline frame, spaced serif capitals, italic gold accents, arched photos, roman numerals. Fits luxury goods, hospitality, jewelry, real estate, fine dining, premium services.",
+  documentary: "Photo-led documentary: a real photograph on nearly every slide, darkened, with condensed caption headlines boxed in yellow and film grain. Fits news, history, places, people, sport, social causes.",
 };
 export const STYLE_IDS = Object.keys(STYLES);
 
@@ -87,7 +95,7 @@ YOUR JOB
 1. Work out the audience, the single goal (saves, shares, comments or follows) and the sharpest angle on the topic.
 2. Recommend the slide count and explain it in one sentence.
 3. Write 5 hook options: different mechanisms (bold claim, number, question, mistake, story opener, contrarian), all specific to this topic.
-4. Create the requested number of creative directions. They must be genuinely different: each uses a different style id, a different hook mechanism and, where the topic allows it, a different framework (the same 7 tips can be a listicle, one person's story, a myth vs fact run or a contrarian take). Vary the image approach too. Never two directions that differ only in colors. Each must suit the topic; skip styles that don't fit it.
+4. Create the requested number of creative directions. They must be genuinely different: each uses a different style id (never the same style twice), ideally from different families (for example one minimal or editorial, one bold or brutalist, one photo-led, one corporate or luxury), a different hook mechanism and, where the topic allows it, a different framework (the same 7 tips can be a listicle, one person's story, a myth vs fact run or a contrarian take). Vary the image approach too. Never two directions that differ only in colors. Each must suit the topic; skip styles that don't fit it.
 5. For each direction choose a palette. Rules: ink on bg contrast at least 7:1; accent readable on bg or used as a fill behind onAccent text; colors fit the style (noir is dark, editorial is warm paper or deep ink, swiss is mostly white or black). Use 6-digit hex.
 6. imageApproach: photo_led (real photos on most slides), photo_accents (2–4 photos), type_only (typography carries it, at most a cover photo), illustrated (painted illustrations, only when the topic is abstract and photos would be generic).
    Real images make carousels feel authentic and stop the scroll. Default to photo_led or photo_accents. Use type_only for at most one direction, and never when the topic is about a specific real product, brand, company, person, place or event: then every direction is photo_led or photo_accents and shows the real thing.

@@ -40,8 +40,8 @@ const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 // Credits per action, and daily caps for the free ones.
-const COST: Record<string, number> = { read: 0, plan: 1, write: 1, images: 1, refine: 1, paint: 2, search: 0, pin: 0, upload: 0 };
-const FREE_CAP: Record<string, number> = { read: 40, search: 150, pin: 300, upload: 150 };
+const COST: Record<string, number> = { recover: 0, read: 0, plan: 1, write: 1, images: 1, refine: 1, paint: 2, search: 0, pin: 0, upload: 0 };
+const FREE_CAP: Record<string, number> = { recover: 400, read: 40, search: 150, pin: 300, upload: 150 };
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -162,8 +162,73 @@ function candidateFrom(v: any): Candidate {
   };
 }
 
+// Nearest alternatives for each theme, used when two directions pick the same one.
+const STYLE_NEIGHBORS: Record<string, string[]> = {
+  editorial: ["magazine", "minimal", "luxury", "documentary"],
+  magazine: ["editorial", "luxury", "documentary", "minimal"],
+  bold: ["brutalist", "retro", "collage", "gradient"],
+  brutalist: ["bold", "swiss", "data", "retro"],
+  swiss: ["minimal", "corporate", "data", "brutalist"],
+  minimal: ["swiss", "aesthetic", "luxury", "editorial"],
+  noir: ["gradient", "data", "documentary", "swiss"],
+  gradient: ["noir", "aesthetic", "bold", "retro"],
+  documentary: ["magazine", "editorial", "noir", "data"],
+  notebook: ["collage", "aesthetic", "retro", "minimal"],
+  data: ["corporate", "swiss", "noir", "brutalist"],
+  corporate: ["data", "swiss", "minimal", "gradient"],
+  collage: ["notebook", "retro", "bold", "aesthetic"],
+  aesthetic: ["minimal", "luxury", "notebook", "gradient"],
+  luxury: ["magazine", "aesthetic", "editorial", "minimal"],
+  retro: ["collage", "bold", "aesthetic", "notebook"],
+};
+// Each theme's default palette (matches src/carousel/styles.js).
+const STYLE_SAMPLES: Record<string, Record<string, string>> = {
+  editorial: { bg: "#F4EFE6", ink: "#1B1712", muted: "#5F564A", accent: "#B4361E", onAccent: "#FFFFFF", surface: "#FBF8F2" },
+  bold: { bg: "#FFE14D", ink: "#111111", muted: "#3D3A2E", accent: "#FF3D2E", onAccent: "#111111", surface: "#FFFFFF" },
+  swiss: { bg: "#F7F7F5", ink: "#111111", muted: "#6B6B6B", accent: "#D93A10", onAccent: "#FFFFFF", surface: "#FFFFFF" },
+  noir: { bg: "#0A0B10", ink: "#F2F3F7", muted: "#9298A8", accent: "#7CF5D4", onAccent: "#0A0B10", surface: "#161925" },
+  documentary: { bg: "#121212", ink: "#F5F2EA", muted: "#B9B2A3", accent: "#F2C230", onAccent: "#121212", surface: "#1E1E1E" },
+  notebook: { bg: "#FBF7EC", ink: "#22262E", muted: "#5B6170", accent: "#FFD84D", onAccent: "#22262E", surface: "#FFFFFF" },
+  data: { bg: "#0E1A2B", ink: "#EAF0F7", muted: "#93A4BA", accent: "#3DDC97", onAccent: "#0E1A2B", surface: "#15243A" },
+  collage: { bg: "#F3EADF", ink: "#1D1A16", muted: "#5D5448", accent: "#2F5BFF", onAccent: "#FFFFFF", surface: "#FFFFFF" },
+  minimal: { bg: "#FAFAF7", ink: "#1A1A1A", muted: "#6E6E6A", accent: "#8C6E5A", onAccent: "#FFFFFF", surface: "#FFFFFF" },
+  luxury: { bg: "#0F1F1A", ink: "#F3EBDD", muted: "#B9AE98", accent: "#C9A45C", onAccent: "#0F1F1A", surface: "#16291F" },
+  corporate: { bg: "#EEF2F8", ink: "#0B1B33", muted: "#4A5872", accent: "#1F5EFF", onAccent: "#FFFFFF", surface: "#FFFFFF" },
+  aesthetic: { bg: "#F7EFE9", ink: "#3A2A2A", muted: "#7A6460", accent: "#A4524D", onAccent: "#FFFFFF", surface: "#FFFFFF" },
+  retro: { bg: "#F6E7C8", ink: "#2B1B12", muted: "#6B4E3A", accent: "#E2572B", onAccent: "#140A05", surface: "#FFF6E3" },
+  brutalist: { bg: "#FFFFFF", ink: "#000000", muted: "#333333", accent: "#FF4F00", onAccent: "#000000", surface: "#FFFFFF" },
+  gradient: { bg: "#1B0F3A", ink: "#FFFFFF", muted: "#C9C2E6", accent: "#FF7AD9", onAccent: "#1B0F3A", surface: "#2A1B57" },
+  magazine: { bg: "#FFFFFF", ink: "#111111", muted: "#555555", accent: "#D0021B", onAccent: "#FFFFFF", surface: "#F4F1EC" },
+};
+
 // The user's image choice in a custom setup, mapped to an image approach.
 const IMAGE_CHOICE: Record<string, string> = { most: "photo_led", some: "photo_accents", none: "type_only", illustrated: "illustrated" };
+
+// ---------- Saved results ----------
+// Write and image results are kept per variation run, so a reload or closed
+// tab during generation doesn't lose (or pay twice for) finished work.
+
+const jobKey = (b: any) => {
+  const ok = (v: unknown) => /^[A-Za-z0-9_-]{1,64}$/.test(String(v ?? ""));
+  return ok(b.projectId) && ok(b.variantId) && ok(b.run) ? { project_id: String(b.projectId), variant_id: String(b.variantId), run: String(b.run) } : null;
+};
+
+async function saveJob(admin: any, userId: string, b: any, kind: "write" | "images", result: unknown) {
+  const key = jobKey(b);
+  if (!key) return;
+  const { error } = await admin.from("carousel_jobs").upsert({ user_id: userId, ...key, kind, result, created_at: new Date().toISOString() }, { onConflict: "user_id,project_id,variant_id,kind" });
+  if (error) console.error("Couldn't save the job", error.message);
+}
+
+async function loadJobs(admin: any, userId: string, b: any) {
+  const key = jobKey(b);
+  if (!key) throw new HttpError(400, "Missing design or variation.");
+  const { data, error } = await admin.from("carousel_jobs").select("kind, result").eq("user_id", userId).eq("project_id", key.project_id).eq("variant_id", key.variant_id).eq("run", key.run);
+  if (error) throw new Error(error.message);
+  const out: Record<string, unknown> = {};
+  for (const row of data ?? []) out[row.kind] = row.result;
+  return out;
+}
 
 // ---------- Actions ----------
 
@@ -187,6 +252,19 @@ async function plan(b: any, taste: string) {
   // The user's choices win over the model's.
   const images = IMAGE_CHOICE[custom.images] ?? null;
   directions = directions.map((x: any, i: number) => ({ ...x, ...(slides ? { slideCount: slides } : {}), ...(styles[i] ? { style: styles[i] } : {}), ...(images ? { imageApproach: images } : {}) }));
+  // Every direction gets its own theme. A repeat is swapped for the closest
+  // unused one (with that theme's own palette, since the model's palette was
+  // made for the other theme).
+  const taken = new Set<string>();
+  directions = directions.map((x: any) => {
+    if (!taken.has(x.style)) {
+      taken.add(x.style);
+      return x;
+    }
+    const next = (STYLE_NEIGHBORS[x.style] ?? STYLE_IDS).find((id) => !taken.has(id)) ?? STYLE_IDS.find((id) => !taken.has(id))!;
+    taken.add(next);
+    return { ...x, style: next, palette: cleanPalette(STYLE_SAMPLES[next]) };
+  });
   // Without an explicit choice, never return only text-only designs.
   if (!images && directions.length > 1 && directions.every((x: any) => x.imageApproach === "type_only")) {
     directions = directions.map((x: any, i: number) => (i === directions.length - 1 ? x : { ...x, imageApproach: i === 0 ? "photo_led" : "photo_accents" }));
@@ -218,8 +296,24 @@ async function write(b: any, taste: string) {
     tone: str(b.tone, 80),
     taste,
   });
-  const result = await generateJson(pickModels(b.quality), requestBody(WRITE_SYSTEM, [{ text }], writeSchema, 0.85), 120_000);
-  const slides = cleanSlides(result.data?.slides);
+  let result = await generateJson(pickModels(b.quality), requestBody(WRITE_SYSTEM, [{ text }], writeSchema, 0.85), 120_000);
+  let slides = cleanSlides(result.data?.slides);
+  // Every requested slide must come back. A short draft is retried once with
+  // the exact count spelled out; a long one is trimmed (keeping the cta).
+  const wantCount = direction.slideCount;
+  if (slides.length < wantCount) {
+    const retry = await generateJson(
+      pickModels(b.quality),
+      requestBody(WRITE_SYSTEM, [{ text: `${text}\n\nIMPORTANT: return exactly ${wantCount} slides. Your previous draft had ${slides.length}.` }], writeSchema, 0.7),
+      120_000,
+    ).catch(() => null);
+    const again = retry ? cleanSlides(retry.data?.slides) : [];
+    if (again.length > slides.length) {
+      slides = again;
+      result = { ...retry!, usage: { input: (result.usage.input ?? 0) + (retry!.usage.input ?? 0), output: (result.usage.output ?? 0) + (retry!.usage.output ?? 0) } };
+    }
+  }
+  if (slides.length > wantCount) slides = cleanSlides([...slides.slice(0, wantCount - 1), slides[slides.length - 1]]);
   if (slides.length < 2) throw new HttpError(502, "Pip's draft came back incomplete. Try again.");
   return {
     out: {
@@ -231,102 +325,137 @@ async function write(b: any, taste: string) {
   };
 }
 
-// Finds candidates for every slide that needs a photo, lets the model act as
-// photo editor, then stores the picks. Slides whose picks all fail to download
-// come back with candidates but no image, and the editor offers to swap.
+// The photo editor: shows the model each slide's brief with its candidates
+// and returns the accepted ones per slide, best first. Retried once; when it
+// still fails, nothing is accepted (an unreviewed photo is often wrong).
+const LETTERS = "ABCDEFGH";
+async function rankCandidates(b: any, entries: { i: number; s: any; list: Candidate[] }[], thumbs: Map<string, { mimeType: string; data: string }>) {
+  const style = STYLE_IDS.includes(b.style) ? b.style : "editorial";
+  const parts: Part[] = [{ text: `CAROUSEL TOPIC: ${str(b.topic, 300)}\nSTYLE: ${style}\nPHOTO TREATMENT: ${str(b.treatment, 20) || "natural"}` }];
+  const shown = new Map<number, Candidate[]>();
+  for (const { i, s, list } of entries) {
+    const usable = list.filter((c) => thumbs.has(c.id)).slice(0, LETTERS.length);
+    if (!usable.length) continue;
+    shown.set(i, usable);
+    parts.push({ text: `SLIDE ${i + 1} (${s.layout}) headline: "${s.title}". Image brief: ${s.image.subject || s.image.query}.` });
+    usable.forEach((c, k) => {
+      parts.push({ text: `${i + 1}.${LETTERS[k]}${c.title ? ` (${c.title.slice(0, 80)})` : ""}` });
+      parts.push({ inlineData: thumbs.get(c.id)! });
+    });
+  }
+  const verdicts = new Map<number, { order: Candidate[]; focus: { x: number; y: number }; textArea: string }>();
+  if (!shown.size) return { verdicts, result: null };
+  let result: any = null;
+  for (let attempt = 0; attempt < 2 && !result; attempt++) {
+    try {
+      result = await generateJson([MODELS.fast, MODELS.fallback], requestBody(RANK_SYSTEM, parts, rankSchema, 0.2), 90_000);
+    } catch (err) {
+      console.error("Ranking failed", attempt, String(err).slice(0, 200));
+    }
+  }
+  for (const pick of Array.isArray(result?.data?.picks) ? result.data.picks : []) {
+    const i = Number(pick?.slide) - 1;
+    const list = shown.get(i);
+    if (!list) continue;
+    const order: Candidate[] = [];
+    for (const label of Array.isArray(pick?.order) ? pick.order : []) {
+      // Accept "B", "3.B" or "3B".
+      const letter = /([A-H])\s*$/i.exec(String(label).trim())?.[1]?.toUpperCase() ?? "";
+      const c = letter ? list[LETTERS.indexOf(letter)] : undefined;
+      if (c && !order.includes(c)) order.push(c);
+    }
+    verdicts.set(i, {
+      order,
+      focus: { x: clampInt(pick?.focusX, 0, 100, 50), y: clampInt(pick?.focusY, 0, 100, 45) },
+      textArea: ["light", "dark", "busy"].includes(pick?.textArea) ? pick.textArea : "busy",
+    });
+  }
+  return { verdicts, result };
+}
+
+// Finds candidates for every slide that needs a photo, has the photo editor
+// review them, and stores the accepted picks. Slides with no accepted photo
+// get a second search (their alternative query and the brief's subject),
+// reviewed the same way. Slides still without one come back with status
+// "none" and their candidates, so the editor can offer a manual choice.
+// Results carry each slide's id, so they land on the right slide even when
+// slides were reordered or edited meanwhile.
 async function images(b: any, admin: any, userId: string) {
   const slides = cleanSlides(b.slides);
+  const ids: string[] = Array.isArray(b.ids) ? b.ids.map((x: unknown) => str(x, 40)) : [];
   const wanted = Array.isArray(b.only) ? new Set(b.only.map(Number)) : null;
   const licensed = b.licensed === true;
   const folder = folderOf(b.projectId);
-  const style = STYLE_IDS.includes(b.style) ? b.style : "editorial";
   const needs = slides
     .map((s, i) => ({ s, i }))
     .filter(({ s, i }) => s.image.use && s.image.kind !== "illustration" && (!wanted || wanted.has(i)));
   if (!needs.length) return { out: { slides: [] }, result: null };
 
-  const found = await Promise.all(needs.map(({ s }) => findCandidates(s.image, { licensed, limit: 7 })));
-  const all = found.flat();
-  const thumbs = await thumbnailsFor(all);
-  const letters = "ABCDEFGH";
+  const found = new Map<number, Candidate[]>();
+  await Promise.all(needs.map(async ({ s, i }) => found.set(i, await findCandidates(s.image, { licensed, limit: 7 }))));
+  const thumbs = await thumbnailsFor([...found.values()].flat());
+  let { verdicts, result } = await rankCandidates(b, needs.map(({ s, i }) => ({ i, s, list: found.get(i) ?? [] })), thumbs);
 
-  // The photo editor sees each slide's brief and its candidates.
-  const parts: Part[] = [{ text: `CAROUSEL TOPIC: ${str(b.topic, 300)}\nSTYLE: ${style}\nPHOTO TREATMENT: ${str(b.treatment, 20) || "natural"}` }];
-  const shown = new Map<string, Candidate[]>();
-  needs.forEach(({ s, i }, n) => {
-    const usable = found[n].filter((c) => thumbs.has(c.id));
-    if (!usable.length) return;
-    shown.set(String(i + 1), usable);
-    parts.push({ text: `SLIDE ${i + 1} (${s.layout}) headline: "${s.title}". Image brief: ${s.image.subject || s.image.query}.` });
-    usable.forEach((c, k) => {
-      parts.push({ text: `${i + 1}.${letters[k]}${c.title ? ` (${c.title.slice(0, 80)})` : ""}` });
-      parts.push({ inlineData: thumbs.get(c.id)! });
-    });
-  });
+  const used = new Set<string>();
+  const chosen = new Map<number, any>();
+  const problems = new Map<number, string>();
+  const pinFirst = async (i: number) => {
+    const v = verdicts.get(i);
+    for (const c of v?.order ?? []) {
+      if (used.has(c.id)) continue;
+      used.add(c.id);
+      try {
+        const src = await pinCandidate(admin, userId, folder, c);
+        chosen.set(i, { ...publicCandidate(c), src, focus: v!.focus, textArea: v!.textArea });
+        return;
+      } catch (err) {
+        used.delete(c.id);
+        problems.set(i, String((err as Error)?.message ?? err).slice(0, 160));
+      }
+    }
+    if (!problems.has(i)) problems.set(i, v ? "The photo editor accepted none of the results" : "No results could be reviewed");
+  };
+  // One slide at a time, in order, so two slides never take the same photo.
+  for (const { i } of needs) await pinFirst(i);
 
-  let picks: any[] = [];
-  let result: any = null;
-  if (shown.size) {
-    try {
-      result = await generateJson([MODELS.fast, MODELS.fallback], requestBody(RANK_SYSTEM, parts, rankSchema, 0.2), 90_000);
-      picks = Array.isArray(result.data?.picks) ? result.data.picks : [];
-    } catch (err) {
-      // Without the editor, fall back to search order rather than fail the carousel.
-      console.error("Ranking failed; using search order", String(err));
+  // Second pass for slides without a photo.
+  const missing = needs.filter(({ i }) => !chosen.has(i));
+  if (missing.length) {
+    const queries = (s: any) => [s.image.altQuery, s.image.subject && s.image.subject.split(/\s+/).slice(0, 7).join(" ")].filter((q, k, a) => q && q !== s.image.query && a.indexOf(q) === k);
+    const more = new Map<number, Candidate[]>();
+    await Promise.all(
+      missing.map(async ({ s, i }) => {
+        const lists = await Promise.all(queries(s).map((q: string) => findCandidates({ query: q, kind: s.image.kind }, { licensed, limit: 5 })));
+        const seen = new Set((found.get(i) ?? []).map((c) => c.id));
+        const fresh: Candidate[] = [];
+        for (const c of lists.flat()) {
+          if (seen.has(c.id)) continue;
+          seen.add(c.id);
+          fresh.push(c);
+        }
+        more.set(i, fresh);
+      }),
+    );
+    const extraThumbs = await thumbnailsFor([...more.values()].flat());
+    for (const [k, v] of extraThumbs) thumbs.set(k, v);
+    const second = await rankCandidates(b, missing.map(({ s, i }) => ({ i, s, list: more.get(i) ?? [] })), thumbs);
+    verdicts = second.verdicts;
+    if (second.result) result = { ...second.result, usage: { input: (result?.usage?.input ?? 0) + (second.result.usage?.input ?? 0), output: (result?.usage?.output ?? 0) + (second.result.usage?.output ?? 0) } };
+    for (const { i } of missing) {
+      found.set(i, [...(found.get(i) ?? []), ...(more.get(i) ?? [])]);
+      if (verdicts.has(i)) await pinFirst(i);
     }
   }
 
-  const used = new Set<string>();
-  const out = await Promise.all(
-    needs.map(async ({ i }, n) => {
-      const list = shown.get(String(i + 1)) ?? [];
-      const pick = picks.find((p) => Number(p?.slide) === i + 1);
-      const ordered: Candidate[] = [];
-      for (const label of Array.isArray(pick?.order) ? pick.order : []) {
-        // Accept "B", "3.B" or "3B".
-        const letter = /([A-H])\s*$/i.exec(String(label).trim())?.[1]?.toUpperCase() ?? "";
-        const c = letter ? list[letters.indexOf(letter)] : undefined;
-        if (c && !ordered.includes(c)) ordered.push(c);
-      }
-      // Without the editor's verdict (it failed, or previews didn't load),
-      // fall back to the top search results.
-      if (!pick) ordered.push(...(list.length ? list : found[n] ?? []).slice(0, 3));
-      const focus = { x: clampInt(pick?.focusX, 0, 100, 50), y: clampInt(pick?.focusY, 0, 100, 45) };
-      let chosen: any = null;
-      let problem = ordered.length ? "" : "No suitable photo found";
-      for (const c of ordered) {
-        if (used.has(c.id)) continue;
-        try {
-          const src = await pinCandidate(admin, userId, folder, c);
-          used.add(c.id);
-          chosen = { ...publicCandidate(c), src, focus, textArea: ["light", "dark", "busy"].includes(pick?.textArea) ? pick.textArea : "busy" };
-          break;
-        } catch (err) {
-          problem = String((err as Error)?.message ?? err).slice(0, 160);
-          console.error("Pin failed", c.id, problem);
-        }
-      }
-      // Nothing usable: one more try with the slide's second search, top results in order.
-      if (!chosen) {
-        const s = slides[i];
-        const retry = s.image.altQuery ? await findCandidates({ query: s.image.altQuery, kind: s.image.kind }, { licensed, limit: 4 }) : [];
-        for (const c of retry) {
-          if (used.has(c.id)) continue;
-          try {
-            const src = await pinCandidate(admin, userId, folder, c);
-            used.add(c.id);
-            chosen = { ...publicCandidate(c), src, focus: { x: 50, y: 45 }, textArea: "busy" };
-            found[n] = [...(found[n] ?? []), ...retry];
-            break;
-          } catch (err) {
-            problem = String((err as Error)?.message ?? err).slice(0, 160);
-          }
-        }
-      }
-      return { index: i, chosen, problem: chosen ? "" : problem, candidates: (found[n] ?? []).map(publicCandidate) };
-    }),
-  );
-  return { out: { slides: out, stats: { found: all.length, previews: thumbs.size, ranked: picks.length } }, result };
+  const out = needs.map(({ i }) => ({
+    index: i,
+    id: ids[i] || "",
+    chosen: chosen.get(i) ?? null,
+    status: chosen.has(i) ? "ok" : "none",
+    problem: chosen.has(i) ? "" : problems.get(i) || "No suitable photo found",
+    candidates: (found.get(i) ?? []).map(publicCandidate),
+  }));
+  return { out: { slides: out, stats: { slides: needs.length, placed: chosen.size } }, result };
 }
 
 async function refine(b: any, taste: string) {
@@ -445,12 +574,19 @@ Deno.serve(async (req) => {
       case "write": {
         const { out, result } = await write(body, taste);
         await done(result);
+        await saveJob(admin, user.id, body, "write", out);
         return json(200, { result: out, quota });
       }
       case "images": {
         const { out, result } = await images(body, admin, user.id);
         await done(result);
+        await saveJob(admin, user.id, body, "images", out);
         return json(200, { result: out, quota });
+      }
+      case "recover": {
+        const jobs = await loadJobs(admin, user.id, body);
+        await done(null);
+        return json(200, { result: jobs, quota });
       }
       case "refine": {
         const { out, result } = await refine(body, taste);

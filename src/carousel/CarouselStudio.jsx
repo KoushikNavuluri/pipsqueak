@@ -1,8 +1,13 @@
-// The carousel editor: variations side by side, a swipeable preview, a slide
-// strip to reorder, and an inspector for text, photos, design and caption.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// The carousel editor.
+//
+// Desktop (lg and up): a slide rail on the left, the stage in the middle and
+// the inspector on the right, each scrolling on its own.
+// Tablet and phone: one scrolling column. The slide comes first (swipe to
+// move between slides), then the slide strip, Ask Pip and the inspector.
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, Reorder, motion } from "framer-motion";
 import {
+  AlertCircle,
   ArrowLeft,
   Check,
   ChevronLeft,
@@ -17,6 +22,7 @@ import {
   Plus,
   Redo2,
   RefreshCw,
+  Search,
   Smartphone,
   Sparkles,
   Trash2,
@@ -25,11 +31,10 @@ import {
 } from "lucide-react";
 import { useProject, useStore } from "../store";
 import { Button, Dialog, IconButton, Segmented, Switch, cx, useMedia } from "../ui";
-import { inputClass } from "../pages/forms";
 import { PipGlyph } from "../brand";
 import { useCredits } from "../credits";
 import { download, uid } from "../util";
-import { FORMATS, STYLES, STYLE_IDS, ensureFonts, safePalette } from "./styles";
+import { FORMATS, STYLES, STYLE_GROUPS, STYLE_IDS, ensureFonts, safePalette } from "./styles";
 import { ScaledSlide, stepNumbers } from "./Slide";
 import {
   ITEM_LAYOUTS,
@@ -42,16 +47,14 @@ import {
   emptySlide,
   exportWarnings,
   mergeRefined,
-  moveSlide,
   needsImage,
   settleLayouts,
   withSlide,
   withVariant,
 } from "./model";
-import { buildVariant, findImages, isRunning, refineSlides } from "./engine";
+import { buildVariant, findImages, isRunning, refineSlides, resumeVariant } from "./engine";
 import { PhotoPicker } from "./PhotoPicker";
 
-const STATUS = { writing: "Writing slides", images: "Finding photos", ready: "Ready", error: "Failed" };
 const TREATMENTS = [
   ["natural", "Natural"],
   ["darken", "Darkened"],
@@ -65,17 +68,18 @@ const CONTINUITY = [
   ["panorama", "Glow across slides"],
 ];
 const QUICK = ["Make the hook punchier", "Shorter text", "More specific examples", "Make it more fun", "Add a surprising fact"];
+const BUSY = new Set(["writing", "images"]);
 
-function useElementWidth(ref) {
-  const [w, setW] = useState(0);
-  useEffect(() => {
+function useElementSize(ref) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));
+    const ro = new ResizeObserver(([e]) => setSize({ w: Math.round(e.contentRect.width), h: Math.round(e.contentRect.height) }));
     ro.observe(el);
     return () => ro.disconnect();
   }, [ref]);
-  return w;
+  return size;
 }
 
 function Label({ children, hint }) {
@@ -87,16 +91,28 @@ function Label({ children, hint }) {
   );
 }
 
+function Section({ title, children, action }) {
+  return (
+    <section className="border-b border-line-soft px-4 py-5 last:border-0 sm:px-5">
+      {(title || action) && (
+        <div className="mb-3 flex items-center justify-between gap-2">
+          {title && <h3 className="text-[13px] font-semibold text-ink">{title}</h3>}
+          {action}
+        </div>
+      )}
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+}
+
 const area = "w-full resize-none rounded-xl border border-line bg-surface px-3 py-2 text-sm leading-relaxed outline-none transition-colors hover:border-line-strong focus:border-ink/60";
-const line = "h-9 w-full rounded-xl border border-line bg-surface px-3 text-sm outline-none transition-colors hover:border-line-strong focus:border-ink/60";
+const line = "h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm outline-none transition-colors hover:border-line-strong focus:border-ink/60";
 
 // ---------- Inspector: slide ----------
 
-function SlideInspector({ project, variant, slide, index, onEdit, onPhoto, busyImages }) {
-  const set = (patch, key) => onEdit((s) => ({ ...s, ...patch }), key);
-  const items = slide.items || [];
-  const setItem = (i, patch) => set({ items: items.map((it, k) => (k === i ? { ...it, ...patch } : it)) }, `items-${i}`);
+function PhotoPanel({ slide, onEdit, onPhoto, onRetry, searching }) {
   const img = slide.img;
+  const set = (patch, key) => onEdit((s) => ({ ...s, ...patch }), key);
   const pickFocus = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     const x = Math.round(((e.clientX - r.left) / r.width) * 100);
@@ -104,159 +120,215 @@ function SlideInspector({ project, variant, slide, index, onEdit, onPhoto, busyI
     set({ img: { ...img, focus: { x, y } } }, "focus");
   };
   return (
-    <div className="space-y-5">
-      <div>
-        <Label>Layout</Label>
-        <select value={slide.layout} onChange={(e) => set({ layout: e.target.value, image: { ...slide.image, use: PHOTO_LAYOUTS.has(e.target.value) || slide.image.use } })} className={line} aria-label="Slide layout">
-          {LAYOUTS.filter((l) => (index === 0 ? true : l.id !== "cover")).map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <Label>Kicker</Label>
-        <input value={slide.kicker} onChange={(e) => set({ kicker: e.target.value.slice(0, 32) }, "kicker")} className={line} placeholder="Tiny label above the headline" />
-      </div>
-      <div>
-        <Label hint={`${slide.title.length}/90`}>Headline</Label>
-        <textarea value={slide.title} onChange={(e) => set({ title: e.target.value.slice(0, 90) }, "title")} rows={2} className={area} />
-        <input value={slide.highlight} onChange={(e) => set({ highlight: e.target.value.slice(0, 40) }, "highlight")} className={cx(line, "mt-1.5 text-[13px]")} placeholder="Words to highlight (copied from the headline)" aria-label="Highlighted words" />
-      </div>
-      {slide.layout === "stat" && (
-        <div className="grid grid-cols-[110px_1fr] gap-2">
-          <div>
-            <Label>Number</Label>
-            <input value={slide.stat.value} onChange={(e) => set({ stat: { ...slide.stat, value: e.target.value.slice(0, 8) } }, "stat")} className={line} />
+    <div className="space-y-3">
+      <label className="flex items-center justify-between gap-3 text-sm">
+        <span className="text-ink-2">Show a photo on this slide</span>
+        <Switch on={!!slide.image.use} onChange={(v) => set({ image: { ...slide.image, use: v, status: v && !img?.src ? "empty" : slide.image.status } })} label="Show a photo on this slide" />
+      </label>
+      {slide.image.use &&
+        (img?.src ? (
+          <>
+            <button type="button" onClick={pickFocus} title="Click the subject to keep it in frame" className="relative block aspect-[4/3] w-full cursor-crosshair overflow-hidden rounded-xl bg-sunken">
+              <img src={img.src} alt="" className="h-full w-full object-contain" crossOrigin="anonymous" />
+              <span className="pointer-events-none absolute flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-black/40 text-white shadow" style={{ left: `${img.focus?.x ?? 50}%`, top: `${img.focus?.y ?? 45}%` }}>
+                <Crosshair size={14} />
+              </span>
+            </button>
+            <p className="text-[12px] leading-snug text-mute">
+              Click the subject to keep it in frame.{" "}
+              {img.credit && (
+                <>
+                  From{" "}
+                  {img.page ? (
+                    <a href={img.page} target="_blank" rel="noreferrer noopener" className="underline hover:text-ink">
+                      {img.credit}
+                    </a>
+                  ) : (
+                    img.credit
+                  )}
+                  .
+                </>
+              )}
+              {img.license && <span className="block text-faint">{img.license}</span>}
+            </p>
+          </>
+        ) : searching ? (
+          <div className="flex aspect-[4/3] items-center justify-center gap-2 rounded-xl bg-sunken text-sm text-mute">
+            <LoaderCircle size={16} className="animate-spin" /> Finding a photo…
           </div>
-          <div>
-            <Label>Measures</Label>
-            <input value={slide.stat.label} onChange={(e) => set({ stat: { ...slide.stat, label: e.target.value.slice(0, 60) } }, "stat-label")} className={line} />
+        ) : (
+          <div className="rounded-xl border border-dashed border-line-strong p-4 text-[13px] leading-relaxed text-mute">
+            <p className="flex items-center gap-2 font-medium text-ink-2">
+              <AlertCircle size={15} /> No good photo found yet
+            </p>
+            <p className="mt-1">This slide shows as text until you choose one.</p>
           </div>
+        ))}
+      {slide.image.use && (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" icon={ImageIcon} onClick={onPhoto}>
+            {img?.src ? "Swap photo" : "Choose photo"}
+          </Button>
+          {!img?.src && !searching && (
+            <Button variant="ghost" size="sm" icon={Search} onClick={onRetry}>
+              Search again
+            </Button>
+          )}
+          {img?.src && (
+            <Button variant="ghost" size="sm" onClick={() => set({ img: null, image: { ...slide.image, status: "none" } })}>
+              Remove
+            </Button>
+          )}
         </div>
       )}
-      {slide.layout === "quote" && (
-        <div className="space-y-2">
-          <Label>Quote</Label>
-          <textarea value={slide.quote.text} onChange={(e) => set({ quote: { ...slide.quote, text: e.target.value.slice(0, 180) } }, "quote")} rows={3} className={area} />
-          <input value={slide.quote.by} onChange={(e) => set({ quote: { ...slide.quote, by: e.target.value.slice(0, 60) } }, "quote-by")} className={line} placeholder="Who said it" />
-        </div>
-      )}
-      <div>
-        <Label hint={`${slide.body.length}/220`}>Body</Label>
-        <textarea value={slide.body} onChange={(e) => set({ body: e.target.value.slice(0, 220) }, "body")} rows={3} className={area} />
-      </div>
-      {ITEM_LAYOUTS.has(slide.layout) && slide.layout !== "step" && (
-        <div>
-          <Label hint={slide.layout === "compare" ? "left, then right" : "up to 6"}>Items</Label>
-          <div className="space-y-2">
-            {items.map((it, i) => (
-              <div key={i} className="flex gap-1.5">
-                <input value={it.label} onChange={(e) => setItem(i, { label: e.target.value.slice(0, 28) })} className={cx(line, "w-28 shrink-0")} placeholder="Label" aria-label={`Item ${i + 1} label`} />
-                <input value={it.text} onChange={(e) => setItem(i, { text: e.target.value.slice(0, 100) })} className={line} placeholder="Text" aria-label={`Item ${i + 1} text`} />
-                {slide.layout !== "compare" && <IconButton icon={X} label={`Remove item ${i + 1}`} size={36} iconSize={14} onClick={() => set({ items: items.filter((_, k) => k !== i) })} />}
-              </div>
-            ))}
-            {slide.layout !== "compare" && items.length < 6 && (
-              <Button variant="ghost" size="sm" icon={Plus} onClick={() => set({ items: [...items, { label: "", text: "" }] })}>
-                Add item
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-      <div>
-        <Label>Source</Label>
-        <input value={slide.source} onChange={(e) => set({ source: e.target.value.slice(0, 80) }, "source")} className={line} placeholder="For numbers and quotes, e.g. Pew Research, 2024" />
-      </div>
+    </div>
+  );
+}
 
-      <div className="rounded-2xl border border-line p-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[13px] font-semibold">Photo</span>
-          <label className="flex items-center gap-2 text-xs text-mute">
-            Show
-            <Switch on={!!slide.image.use} onChange={(v) => set({ image: { ...slide.image, use: v } })} label="Show a photo on this slide" />
-          </label>
+function SlideInspector({ slide, index, onEdit, onPhoto, onRetry, searching }) {
+  const set = (patch, key) => onEdit((s) => ({ ...s, ...patch }), key);
+  const items = slide.items || [];
+  const setItem = (i, patch) => set({ items: items.map((it, k) => (k === i ? { ...it, ...patch } : it)) }, `items-${i}`);
+  return (
+    <>
+      <Section title="Content">
+        <div>
+          <Label>Layout</Label>
+          <select value={slide.layout} onChange={(e) => {
+              const use = PHOTO_LAYOUTS.has(e.target.value) || slide.image.use;
+              set({ layout: e.target.value, image: { ...slide.image, use, status: use && !slide.img?.src && !slide.image.use ? "empty" : slide.image.status } });
+            }} className={line} aria-label="Slide layout">
+            {LAYOUTS.filter((l) => (index === 0 ? true : l.id !== "cover")).map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label}
+              </option>
+            ))}
+          </select>
         </div>
-        {slide.image.use && (
-          <div className="mt-3">
-            {img?.src ? (
-              <>
-                <button type="button" onClick={pickFocus} title="Click the subject to keep it in frame" className="relative block aspect-[4/3] w-full cursor-crosshair overflow-hidden rounded-xl bg-sunken">
-                  <img src={img.src} alt="" className="h-full w-full object-contain" crossOrigin="anonymous" />
-                  <span className="pointer-events-none absolute flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-black/40 text-white shadow" style={{ left: `${img.focus?.x ?? 50}%`, top: `${img.focus?.y ?? 45}%` }}>
-                    <Crosshair size={14} />
-                  </span>
-                </button>
-                <p className="mt-1.5 text-[11px] leading-snug text-mute">
-                  Click the subject to keep it in frame. {img.credit && <>From {img.page ? <a href={img.page} target="_blank" rel="noreferrer noopener" className="underline hover:text-ink">{img.credit}</a> : img.credit}</>}
-                  {img.license && <span className="block text-faint">{img.license}</span>}
-                </p>
-              </>
-            ) : busyImages ? (
-              <div className="flex aspect-[4/3] items-center justify-center gap-2 rounded-xl bg-sunken text-sm text-mute">
-                <LoaderCircle size={16} className="animate-spin" /> Finding a photo…
-              </div>
-            ) : (
-              <div className="flex aspect-[4/3] flex-col items-center justify-center rounded-xl border border-dashed border-line-strong text-center text-sm text-mute">
-                <ImageIcon size={20} />
-                <span className="mt-1">No photo yet</span>
-              </div>
-            )}
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <Button variant="secondary" size="sm" icon={ImageIcon} onClick={onPhoto}>
-                {img?.src ? "Swap photo" : "Choose photo"}
-              </Button>
-              {img?.src && (
-                <Button variant="ghost" size="sm" onClick={() => set({ img: null })}>
-                  Remove
+        <div>
+          <Label>Kicker</Label>
+          <input value={slide.kicker} onChange={(e) => set({ kicker: e.target.value.slice(0, 32) }, "kicker")} className={line} placeholder="Tiny label above the headline" />
+        </div>
+        <div>
+          <Label hint={`${slide.title.length}/90`}>Headline</Label>
+          <textarea value={slide.title} onChange={(e) => set({ title: e.target.value.slice(0, 90) }, "title")} rows={2} className={area} aria-label="Headline" />
+          <input value={slide.highlight} onChange={(e) => set({ highlight: e.target.value.slice(0, 40) }, "highlight")} className={cx(line, "mt-2 text-[13px]")} placeholder="Words to highlight (copied from the headline)" aria-label="Highlighted words" />
+        </div>
+        {slide.layout === "stat" && (
+          <div className="grid grid-cols-[110px_1fr] gap-2">
+            <div>
+              <Label>Number</Label>
+              <input value={slide.stat.value} onChange={(e) => set({ stat: { ...slide.stat, value: e.target.value.slice(0, 8) } }, "stat")} className={line} />
+            </div>
+            <div>
+              <Label>Measures</Label>
+              <input value={slide.stat.label} onChange={(e) => set({ stat: { ...slide.stat, label: e.target.value.slice(0, 60) } }, "stat-label")} className={line} />
+            </div>
+          </div>
+        )}
+        {slide.layout === "quote" && (
+          <div className="space-y-2">
+            <Label>Quote</Label>
+            <textarea value={slide.quote.text} onChange={(e) => set({ quote: { ...slide.quote, text: e.target.value.slice(0, 180) } }, "quote")} rows={3} className={area} />
+            <input value={slide.quote.by} onChange={(e) => set({ quote: { ...slide.quote, by: e.target.value.slice(0, 60) } }, "quote-by")} className={line} placeholder="Who said it" />
+          </div>
+        )}
+        <div>
+          <Label hint={`${slide.body.length}/220`}>Body</Label>
+          <textarea value={slide.body} onChange={(e) => set({ body: e.target.value.slice(0, 220) }, "body")} rows={3} className={area} aria-label="Body" />
+        </div>
+        {ITEM_LAYOUTS.has(slide.layout) && slide.layout !== "step" && (
+          <div>
+            <Label hint={slide.layout === "compare" ? "left, then right" : "up to 6"}>Items</Label>
+            <div className="space-y-2">
+              {items.map((it, i) => (
+                <div key={i} className="flex gap-1.5">
+                  <input value={it.label} onChange={(e) => setItem(i, { label: e.target.value.slice(0, 28) })} className={cx(line, "w-24 shrink-0 sm:w-28")} placeholder="Label" aria-label={`Item ${i + 1} label`} />
+                  <input value={it.text} onChange={(e) => setItem(i, { text: e.target.value.slice(0, 100) })} className={line} placeholder="Text" aria-label={`Item ${i + 1} text`} />
+                  {slide.layout !== "compare" && <IconButton icon={X} label={`Remove item ${i + 1}`} size={40} iconSize={14} onClick={() => set({ items: items.filter((_, k) => k !== i) })} />}
+                </div>
+              ))}
+              {slide.layout !== "compare" && items.length < 6 && (
+                <Button variant="ghost" size="sm" icon={Plus} onClick={() => set({ items: [...items, { label: "", text: "" }] })}>
+                  Add item
                 </Button>
               )}
             </div>
           </div>
         )}
-      </div>
-      <div>
-        <Label>Alt text</Label>
-        <textarea value={slide.alt} onChange={(e) => set({ alt: e.target.value.slice(0, 300) }, "alt")} rows={2} className={area} placeholder="Describes the slide for screen readers" />
-      </div>
-    </div>
+        <div>
+          <Label>Source</Label>
+          <input value={slide.source} onChange={(e) => set({ source: e.target.value.slice(0, 80) }, "source")} className={line} placeholder="For numbers and quotes, e.g. Pew Research, 2024" />
+        </div>
+      </Section>
+      <Section title="Photo">
+        <PhotoPanel slide={slide} onEdit={onEdit} onPhoto={onPhoto} onRetry={onRetry} searching={searching} />
+      </Section>
+      <Section title="Accessibility">
+        <div>
+          <Label>Alt text</Label>
+          <textarea value={slide.alt} onChange={(e) => set({ alt: e.target.value.slice(0, 300) }, "alt")} rows={2} className={area} placeholder="Describes the slide for screen readers" />
+        </div>
+      </Section>
+    </>
   );
 }
 
 // ---------- Inspector: design ----------
 
+// One theme thumbnail: the current cover in that theme. Memoized because the
+// gallery renders 16 of them.
+const ThemeThumb = memo(function ThemeThumb({ id, on, cover, total, direction, brand, format, onPick, width }) {
+  const st = STYLES[id];
+  return (
+    <button onClick={() => onPick(id)} aria-pressed={on} className={cx("group overflow-hidden rounded-xl border bg-surface text-left transition-[border-color,box-shadow]", on ? "border-ink shadow-[0_0_0_2px_rgba(23,21,15,.14)]" : "border-line hover:border-line-strong")}>
+      {cover ? (
+        <ScaledSlide width={width} slide={cover} index={0} total={total} direction={{ ...direction, style: id, palette: st.sample, continuity: "none" }} brand={brand} format={format} />
+      ) : (
+        <div style={{ width, height: width * 1.25, background: st.sample.bg }} />
+      )}
+      <span className="flex items-center justify-between gap-1 px-2 py-1.5">
+        <span className="truncate text-xs font-medium">{st.name}</span>
+        {on && <Check size={13} className="shrink-0" />}
+      </span>
+    </button>
+  );
+});
+
 function DesignInspector({ project, variant, onEditVariant, onEditCarousel }) {
   const d = variant.direction;
   const pal = safePalette(d.palette, d.style);
   const c = project.carousel;
+  const [group, setGroup] = useState("All");
+  const box = useRef(null);
+  const { w } = useElementSize(box);
   const setDir = (patch, key) => onEditVariant((v) => ({ ...v, direction: { ...v.direction, ...patch } }), key);
   useEffect(() => STYLE_IDS.forEach(ensureFonts), []);
   const cover = variant.slides[0];
+  const ids = STYLE_IDS.filter((id) => group === "All" || STYLES[id].group === group);
+  const cols = w > 420 ? 3 : 2;
+  const thumbW = w ? Math.floor((w - (cols - 1) * 10) / cols) - 2 : 140;
+  const pick = useCallback((id) => setDir({ style: id, palette: STYLES[id].sample }), [onEditVariant]);
   return (
-    <div className="space-y-6">
-      <div>
-        <Label hint="same words, new look">Style</Label>
-        <div className="grid grid-cols-2 gap-2">
-          {STYLE_IDS.map((id) => (
-            <button
-              key={id}
-              onClick={() => setDir({ style: id, palette: STYLES[id].sample })}
-              aria-pressed={d.style === id}
-              className={cx("group overflow-hidden rounded-xl border text-left transition-[border-color,box-shadow]", d.style === id ? "border-ink shadow-[0_0_0_2px_rgba(23,21,15,.12)]" : "border-line hover:border-line-strong")}
-            >
-              {cover && (
-                <ScaledSlide width={138} slide={{ ...cover, img: cover.img }} index={0} total={variant.slides.length} direction={{ ...d, style: id, palette: STYLES[id].sample, continuity: "none" }} brand={c.brand} format={c.format} />
-              )}
-              <span className="block px-2 py-1.5 text-xs font-medium">{STYLES[id].name}</span>
+    <>
+      <Section title="Theme" action={<span className="text-xs text-mute">{STYLES[d.style]?.name}</span>}>
+        <p className="-mt-1 text-[12px] leading-snug text-mute">Same words, a different composition. Each theme has its own layouts, type and photo shapes.</p>
+        <div className="nosb -mx-1 flex gap-1.5 overflow-x-auto px-1">
+          {["All", ...STYLE_GROUPS].map((g) => (
+            <button key={g} onClick={() => setGroup(g)} aria-pressed={group === g} className={cx("shrink-0 rounded-full border px-3 py-1 text-xs transition-colors", group === g ? "border-ink bg-ink text-white" : "border-line text-ink-2 hover:border-line-strong")}>
+              {g}
             </button>
           ))}
         </div>
-      </div>
-      <div>
-        <Label hint="kept readable automatically">Colors</Label>
-        <div className="grid grid-cols-3 gap-2">
+        <div ref={box} className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+          {ids.map((id) => (
+            <ThemeThumb key={id} id={id} on={d.style === id} cover={cover} total={variant.slides.length} direction={d} brand={c.brand} format={c.format} onPick={pick} width={thumbW} />
+          ))}
+        </div>
+      </Section>
+      <Section title="Colors" action={<Button variant="ghost" size="sm" icon={RefreshCw} onClick={() => setDir({ palette: STYLES[d.style].sample })}>Reset</Button>}>
+        <p className="-mt-1 text-[12px] text-mute">Kept readable automatically.</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {[
             ["bg", "Background"],
             ["ink", "Text"],
@@ -265,65 +337,65 @@ function DesignInspector({ project, variant, onEditVariant, onEditCarousel }) {
             ["surface", "Cards"],
             ["onAccent", "On accent"],
           ].map(([k, label]) => (
-            <label key={k} className="flex items-center gap-2 rounded-xl border border-line px-2 py-1.5 text-xs">
-              <input type="color" value={pal[k]} onChange={(e) => setDir({ palette: { ...d.palette, [k]: e.target.value.toUpperCase() } }, `color-${k}`)} className="h-6 w-6 cursor-pointer rounded-md border-0 bg-transparent p-0" aria-label={label} />
+            <label key={k} className="flex items-center gap-2 rounded-xl border border-line px-2.5 py-2 text-xs">
+              <input type="color" value={pal[k]} onChange={(e) => setDir({ palette: { ...d.palette, [k]: e.target.value.toUpperCase() } }, `color-${k}`)} className="h-6 w-6 shrink-0 cursor-pointer rounded-md border-0 bg-transparent p-0" aria-label={label} />
               <span className="truncate">{label}</span>
             </label>
           ))}
         </div>
-        <Button variant="ghost" size="sm" className="mt-1.5" icon={RefreshCw} onClick={() => setDir({ palette: STYLES[d.style].sample })}>
-          Use the style's colors
-        </Button>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label>Photo look</Label>
-          <select value={d.treatment} onChange={(e) => setDir({ treatment: e.target.value })} className={line} aria-label="Photo look">
-            {TREATMENTS.map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </select>
+      </Section>
+      <Section title="Photos and flow">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Photo look</Label>
+            <select value={d.treatment} onChange={(e) => setDir({ treatment: e.target.value })} className={line} aria-label="Photo look">
+              {TREATMENTS.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label>Across slides</Label>
+            <select value={d.continuity} onChange={(e) => setDir({ continuity: e.target.value })} className={line} aria-label="Shape across slides">
+              {CONTINUITY.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+      </Section>
+      <Section title="Format and brand">
         <div>
-          <Label>Flow</Label>
-          <select value={d.continuity} onChange={(e) => setDir({ continuity: e.target.value })} className={line} aria-label="Shape across slides">
-            {CONTINUITY.map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </select>
+          <Segmented id="studio-format" size="sm" full value={c.format} onChange={(v) => onEditCarousel((cc) => ({ ...cc, format: v }))} options={Object.entries(FORMATS).map(([value, f]) => ({ value, label: value, aria: f.note }))} />
+          <p className="mt-1.5 text-[11px] text-faint">{FORMATS[c.format]?.note}</p>
         </div>
-      </div>
-      <div>
-        <Label>Format</Label>
-        <Segmented id="studio-format" size="sm" value={c.format} onChange={(v) => onEditCarousel((cc) => ({ ...cc, format: v }))} options={Object.entries(FORMATS).map(([value, f]) => ({ value, label: value, aria: f.note }))} />
-        <p className="mt-1 text-[11px] text-faint">{FORMATS[c.format]?.note}</p>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <Label>Handle</Label>
-          <input value={c.brand?.handle || ""} onChange={(e) => onEditCarousel((cc) => ({ ...cc, brand: { ...cc.brand, handle: e.target.value.slice(0, 31) } }), "handle")} className={line} placeholder="@handle" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Handle</Label>
+            <input value={c.brand?.handle || ""} onChange={(e) => onEditCarousel((cc) => ({ ...cc, brand: { ...cc.brand, handle: e.target.value.slice(0, 31) } }), "handle")} className={line} placeholder="@handle" />
+          </div>
+          <div>
+            <Label>Name</Label>
+            <input value={c.brand?.name || ""} onChange={(e) => onEditCarousel((cc) => ({ ...cc, brand: { ...cc.brand, name: e.target.value.slice(0, 40) } }), "brand-name")} className={line} placeholder="Brand" />
+          </div>
         </div>
-        <div>
-          <Label>Name</Label>
-          <input value={c.brand?.name || ""} onChange={(e) => onEditCarousel((cc) => ({ ...cc, brand: { ...cc.brand, name: e.target.value.slice(0, 40) } }), "brand-name")} className={line} placeholder="Brand" />
-        </div>
-      </div>
-    </div>
+      </Section>
+    </>
   );
 }
 
 // ---------- Inspector: caption ----------
 
-function CopyButton({ text, label }) {
+function CopyButton({ text, label, size = "sm" }) {
   const [done, setDone] = useState(false);
   return (
     <Button
       variant="secondary"
-      size="sm"
+      size={size}
       icon={done ? Check : Copy}
       onClick={async () => {
         try {
@@ -341,27 +413,35 @@ function CopyButton({ text, label }) {
 function CaptionInspector({ variant, onEditVariant }) {
   const credits = creditsOf(variant);
   return (
-    <div className="space-y-5">
-      <div>
-        <Label hint={`${variant.caption.length}/2200`}>Caption</Label>
-        <textarea value={variant.caption} onChange={(e) => onEditVariant((v) => ({ ...v, caption: e.target.value.slice(0, 2200) }), "caption")} rows={9} className={area} />
-      </div>
-      <div>
-        <Label>Hashtags</Label>
-        <input
-          value={(variant.hashtags || []).map((h) => "#" + h).join(" ")}
-          onChange={(e) => onEditVariant((v) => ({ ...v, hashtags: e.target.value.split(/[\s,]+/).map((h) => h.replace(/^#+/, "")).filter(Boolean).slice(0, 30) }), "tags")}
-          className={line}
-        />
-      </div>
-      <CopyButton text={captionText(variant)} label="Copy caption and hashtags" />
-      <div>
-        <Label>Photo credits</Label>
+    <>
+      <Section title="Caption" action={<CopyButton text={captionText(variant)} label="Copy" />}>
+        <div>
+          <Label hint={`${variant.caption.length}/2200`}>Text</Label>
+          <textarea value={variant.caption} onChange={(e) => onEditVariant((v) => ({ ...v, caption: e.target.value.slice(0, 2200) }), "caption")} rows={9} className={area} aria-label="Caption" />
+        </div>
+        <div>
+          <Label>Hashtags</Label>
+          <input
+            value={(variant.hashtags || []).map((h) => "#" + h).join(" ")}
+            onChange={(e) => onEditVariant((v) => ({ ...v, hashtags: e.target.value.split(/[\s,]+/).map((h) => h.replace(/^#+/, "")).filter(Boolean).slice(0, 30) }), "tags")}
+            className={line}
+            aria-label="Hashtags"
+          />
+        </div>
+      </Section>
+      <Section title="Photo credits">
         {credits.length ? (
-          <ul className="space-y-1.5 text-xs text-ink-2">
+          <ul className="space-y-2 text-xs text-ink-2">
             {credits.map((r) => (
               <li key={r.slide} className="leading-snug">
-                <span className="font-medium">Slide {r.slide}:</span> {r.page ? <a href={r.page} target="_blank" rel="noreferrer noopener" className="underline hover:text-ink">{r.credit || "source"}</a> : r.credit}
+                <span className="font-medium">Slide {r.slide}:</span>{" "}
+                {r.page ? (
+                  <a href={r.page} target="_blank" rel="noreferrer noopener" className="underline hover:text-ink">
+                    {r.credit || "source"}
+                  </a>
+                ) : (
+                  r.credit
+                )}
                 {r.license && <span className="block text-faint">{r.license}</span>}
               </li>
             ))}
@@ -369,8 +449,8 @@ function CaptionInspector({ variant, onEditVariant }) {
         ) : (
           <p className="text-xs text-mute">No photos in this carousel.</p>
         )}
-      </div>
-    </div>
+      </Section>
+    </>
   );
 }
 
@@ -403,7 +483,7 @@ function ExportDialog({ project, variant, index, onClose }) {
   const options = [
     { id: "zip", icon: FileArchive, title: "Instagram carousel", text: `${variant.slides.length} PNGs at ${fmt.w} × ${fmt.h}, plus caption, alt text and photo credits, in a ZIP` },
     { id: "pdf", icon: FileText, title: "LinkedIn document", text: "One PDF; LinkedIn shows it as a swipeable carousel" },
-    { id: "png", icon: ImageIcon, title: `This slide only`, text: `Slide ${index + 1} as a PNG` },
+    { id: "png", icon: ImageIcon, title: "This slide only", text: `Slide ${index + 1} as a PNG` },
   ];
   return (
     <Dialog title="Export" description={variant.direction.name} onClose={busy ? () => {} : onClose}>
@@ -422,7 +502,7 @@ function ExportDialog({ project, variant, index, onClose }) {
               <span className="block text-sm font-semibold">{o.title}</span>
               <span className="block text-[13px] text-mute">{busy === o.id && progress ? `Rendering slide ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…` : o.text}</span>
             </span>
-            <Download size={16} className="text-mute" />
+            <Download size={16} className="shrink-0 text-mute" />
           </button>
         ))}
       </div>
@@ -435,13 +515,53 @@ function ExportDialog({ project, variant, index, onClose }) {
   );
 }
 
-// ---------- Phone preview ----------
+// ---------- Swipeable preview ----------
+
+// The slide on stage. On touch screens it swipes; the neighbours sit beside it.
+function Stage({ project, variant, index, setIndex, width, steps, swipe }) {
+  const c = project.carousel;
+  const slides = variant.slides;
+  const ratio = FORMATS[c.format].h / FORMATS[c.format].w;
+  const go = (n) => setIndex(Math.max(0, Math.min(slides.length - 1, n)));
+  if (!swipe) {
+    const s = slides[index];
+    return (
+      <div className="overflow-hidden rounded-[18px] bg-surface shadow-lift ring-1 ring-black/5" style={{ width, height: width * ratio }}>
+        <ScaledSlide width={width} slide={s} index={index} total={slides.length} direction={variant.direction} brand={c.brand} format={c.format} goal={c.plan?.goal} stepNo={steps[index]} />
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-hidden rounded-[16px] shadow-lift ring-1 ring-black/5" style={{ width, height: width * ratio }}>
+      <motion.div
+        className="flex"
+        drag="x"
+        dragConstraints={{ left: -(slides.length - 1) * width, right: 0 }}
+        dragElastic={0.12}
+        animate={{ x: -index * width }}
+        transition={{ type: "spring", stiffness: 380, damping: 40 }}
+        onDragEnd={(_, info) => {
+          if (info.offset.x < -50 || info.velocity.x < -400) go(index + 1);
+          else if (info.offset.x > 50 || info.velocity.x > 400) go(index - 1);
+        }}
+        style={{ width: width * slides.length, touchAction: "pan-y" }}
+      >
+        {slides.map((s, i) =>
+          Math.abs(i - index) <= 1 ? (
+            <ScaledSlide key={s.id} width={width} slide={s} index={i} total={slides.length} direction={variant.direction} brand={c.brand} format={c.format} goal={c.plan?.goal} stepNo={steps[i]} />
+          ) : (
+            <div key={s.id} style={{ width, height: width * ratio, flexShrink: 0 }} />
+          ),
+        )}
+      </motion.div>
+    </div>
+  );
+}
 
 function PhonePreview({ project, variant, index, setIndex, onClose }) {
   const c = project.carousel;
   const steps = stepNumbers(variant.slides);
-  const fmt = FORMATS[c.format];
-  const width = Math.min(380, typeof window !== "undefined" ? window.innerWidth - 40 : 380);
+  const width = Math.min(380, typeof window !== "undefined" ? window.innerWidth - 48 : 380);
   const go = (n) => setIndex(Math.max(0, Math.min(variant.slides.length - 1, n)));
   useEffect(() => {
     const key = (e) => {
@@ -458,24 +578,7 @@ function PhonePreview({ project, variant, index, setIndex, onClose }) {
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-xs font-bold text-white">{(c.brand?.name || c.brand?.handle || "P").replace("@", "").slice(0, 1).toUpperCase()}</span>
           <span className="text-[13px] font-semibold">{(c.brand?.handle || "yourhandle").replace("@", "")}</span>
         </div>
-        <div className="relative overflow-hidden" style={{ width, height: (fmt.h / fmt.w) * width }}>
-          <motion.div
-            className="flex"
-            drag="x"
-            dragConstraints={{ left: -(variant.slides.length - 1) * width, right: 0 }}
-            animate={{ x: -index * width }}
-            transition={{ type: "spring", stiffness: 380, damping: 40 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.x < -50 || info.velocity.x < -400) go(index + 1);
-              else if (info.offset.x > 50 || info.velocity.x > 400) go(index - 1);
-            }}
-            style={{ width: width * variant.slides.length, touchAction: "pan-y" }}
-          >
-            {variant.slides.map((s, i) => (
-              <ScaledSlide key={s.id} width={width} slide={s} index={i} total={variant.slides.length} direction={variant.direction} brand={c.brand} format={c.format} goal={c.plan?.goal} stepNo={steps[i]} />
-            ))}
-          </motion.div>
-        </div>
+        <Stage project={project} variant={variant} index={index} setIndex={setIndex} width={width} steps={steps} swipe />
         <div className="flex justify-center gap-1 py-2.5">
           {variant.slides.map((s, i) => (
             <button key={s.id} onClick={() => go(i)} aria-label={`Slide ${i + 1}`} className={cx("h-1.5 w-1.5 rounded-full transition-colors", i === index ? "bg-[#3897F0]" : "bg-black/20")} />
@@ -486,6 +589,54 @@ function PhonePreview({ project, variant, index, setIndex, onClose }) {
         </p>
       </div>
     </Dialog>
+  );
+}
+
+// ---------- Slide strip ----------
+
+function SlideStrip({ project, variant, index, setIndex, steps, vertical, onReorder, onAdd, onDup, onDel }) {
+  const c = project.carousel;
+  const slides = variant.slides;
+  const ratio = FORMATS[c.format].h / FORMATS[c.format].w;
+  const thumb = vertical ? 96 : 72;
+  const busyIds = new Set(slides.filter((s) => s.image?.use && !s.img?.src && s.image?.status === "searching").map((s) => s.id));
+  return (
+    <Reorder.Group
+      axis={vertical ? "y" : "x"}
+      values={slides}
+      onReorder={onReorder}
+      className={cx(vertical ? "flex flex-col items-center gap-3 px-3 py-4" : "nosb mx-auto flex w-fit max-w-full gap-2.5 overflow-x-auto px-4 pb-3 pt-2")}
+    >
+      {slides.map((sl, i) => (
+        <Reorder.Item key={sl.id} value={sl} className="group relative shrink-0" whileDrag={{ scale: 1.05, zIndex: 10 }}>
+          <button
+            onClick={() => setIndex(i)}
+            aria-label={`Slide ${i + 1}`}
+            aria-current={i === index}
+            className={cx("relative block overflow-hidden rounded-lg ring-offset-2 ring-offset-canvas transition", i === index ? "ring-2 ring-ink" : "opacity-85 ring-1 ring-black/5 hover:opacity-100")}
+          >
+            <ScaledSlide width={thumb} slide={sl} index={i} total={slides.length} direction={variant.direction} brand={c.brand} format={c.format} goal={c.plan?.goal} stepNo={steps[i]} />
+            {busyIds.has(sl.id) && (
+              <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+                <LoaderCircle size={16} className="animate-spin text-white" />
+              </span>
+            )}
+          </button>
+          <span className={cx("pointer-events-none absolute font-mono text-[10px] text-mute", vertical ? "-left-5 top-1" : "-bottom-0.5 left-1")}>{i + 1}</span>
+          <span className="absolute -right-1.5 -top-1.5 hidden gap-0.5 group-focus-within:flex group-hover:flex">
+            <button onClick={() => onDup(i)} aria-label={`Duplicate slide ${i + 1}`} className="flex h-6 w-6 items-center justify-center rounded-full bg-surface shadow ring-1 ring-black/10 hover:bg-wash">
+              <Copy size={11} />
+            </button>
+            <button onClick={() => onDel(i)} aria-label={`Delete slide ${i + 1}`} className="flex h-6 w-6 items-center justify-center rounded-full bg-surface text-danger shadow ring-1 ring-black/10 hover:bg-wash">
+              <Trash2 size={11} />
+            </button>
+          </span>
+        </Reorder.Item>
+      ))}
+      <button onClick={onAdd} aria-label="Add a slide" className="flex shrink-0 items-center justify-center rounded-lg border border-dashed border-line-strong text-mute transition-colors hover:border-ink hover:text-ink" style={{ width: thumb, height: thumb * ratio }}>
+        <Plus size={18} />
+      </button>
+    </Reorder.Group>
   );
 }
 
@@ -506,8 +657,9 @@ export function CarouselStudio() {
   const [asking, setAsking] = useState(false);
   const [imagesBusy, setImagesBusy] = useState(false);
   const stage = useRef(null);
-  const stageW = useElementWidth(stage);
+  const size = useElementSize(stage);
   const wide = useMedia("(min-width: 1024px)");
+  const touch = useMedia("(pointer: coarse)");
   const { left } = useCredits(asking || imagesBusy ? 1 : 0);
 
   const slides = variant?.slides || [];
@@ -520,6 +672,16 @@ export function CarouselStudio() {
   useEffect(() => {
     if (variant?.direction?.style) ensureFonts(variant.direction.style);
   }, [variant?.direction?.style]);
+
+  // Variations still marked as generating (the page was reloaded or closed
+  // meanwhile) are finished from the results saved on the server.
+  useEffect(() => {
+    if (!project) return;
+    for (const v of c.variants) {
+      const unfinished = BUSY.has(v.status) || (v.status === "stopped" && v.slides.length > 0);
+      if (unfinished && !isRunning(v.id)) resumeVariant({ api, projectId: project.id, variantId: v.id });
+    }
+  }, [project?.id]);
 
   const editProject = useCallback((fn, key) => api.edit(project.id, fn, key ? { key: `${project.id}:${key}` } : {}), [api, project?.id]);
   const editVariant = useCallback((fn, key) => editProject((p) => withVariant(p, variant.id, fn), key && `${variant.id}:${key}`), [editProject, variant?.id]);
@@ -545,27 +707,23 @@ export function CarouselStudio() {
 
   if (!project || !c || !variant) return null;
 
-  const busy = variant.status === "writing" || variant.status === "images";
-  const interrupted = busy && !isRunning(variant.id);
+  const generating = BUSY.has(variant.status) && isRunning(variant.id);
+  const stopped = !slides.length && (variant.status === "stopped" || variant.status === "error" || (BUSY.has(variant.status) && !isRunning(variant.id)));
+  const searching = (sl) => !!sl?.image?.use && !sl?.img?.src && (sl.image.status === "searching" || (variant.status === "images" && isRunning(variant.id)));
   const hist = s.hist[project.id];
-
-  const resume = () => {
-    if (!variant.slides.length) buildVariant({ api, projectId: project.id, variantId: variant.id, request: { quality: s.data.prefs.aiQuality } });
-    else {
-      setImagesBusy(true);
-      findImages({ api, projectId: project.id, variantId: variant.id })
-        .catch((err) => api.toast(err.message, { tone: "error" }))
-        .finally(() => {
-          editVariant((v) => ({ ...v, status: "ready" }));
-          setImagesBusy(false);
-        });
-    }
-  };
+  const ratio = FORMATS[c.format].h / FORMATS[c.format].w;
 
   const regenerate = () => {
     editVariant((v) => ({ ...v, slides: [], status: "writing", error: "" }));
     setIndex(0);
-    setTimeout(() => buildVariant({ api, projectId: project.id, variantId: variant.id, request: { quality: s.data.prefs.aiQuality } }), 0);
+    setTimeout(() => buildVariant({ api, projectId: project.id, variantId: variant.id, request: { quality: s.data.prefs.aiQuality }, fresh: true }), 0);
+  };
+
+  const retryPhotos = (only) => {
+    setImagesBusy(true);
+    findImages({ api, projectId: project.id, variantId: variant.id, only })
+      .catch((err) => api.toast(err.message, { tone: "error" }))
+      .finally(() => setImagesBusy(false));
   };
 
   const addSlide = () => {
@@ -575,7 +733,7 @@ export function CarouselStudio() {
     setIndex(at);
   };
   const dupSlide = (i) => {
-    if (slides.length >= MAX_SLIDES) return;
+    if (slides.length >= MAX_SLIDES) return api.toast(`Instagram allows ${MAX_SLIDES} slides at most`, { tone: "error" });
     editVariant((v) => ({ ...v, slides: settleLayouts([...v.slides.slice(0, i + 1), { ...v.slides[i], id: uid() }, ...v.slides.slice(i + 1)]) }));
     setIndex(i + 1);
   };
@@ -583,6 +741,12 @@ export function CarouselStudio() {
     if (slides.length <= 2) return api.toast("A carousel needs at least 2 slides", { tone: "error" });
     editVariant((v) => ({ ...v, slides: settleLayouts(v.slides.filter((_, k) => k !== i)) }));
     api.toast("Slide deleted", { action: { label: "Undo", run: () => api.undo(project.id) } });
+  };
+  const reorder = (next) => {
+    const cur = slide?.id;
+    editVariant((v) => ({ ...v, slides: settleLayouts(next) }), "reorder");
+    const ni = next.findIndex((x) => x.id === cur);
+    if (ni >= 0) setIndex(ni);
   };
 
   const askPip = async (instruction = ask) => {
@@ -609,195 +773,187 @@ export function CarouselStudio() {
     }
   };
 
-  const previewW = Math.max(220, Math.min(stageW - 120, wide ? 520 : 440, (window.innerHeight - 330) * (FORMATS[c.format].w / FORMATS[c.format].h)));
+  // Preview size: as large as the stage allows.
+  const previewW = wide
+    ? Math.max(240, Math.min(size.w - 120, (size.h - 60) / ratio, 600))
+    : Math.max(220, Math.min((size.w || 360) - 32, 520, (typeof window !== "undefined" ? window.innerHeight * 0.62 : 600) / ratio));
+
+  const variationBar = (
+    <div className="nosb flex items-center gap-2 overflow-x-auto px-3 py-2 sm:px-4">
+      {c.variants.map((v) => {
+        const on = v.id === variant.id;
+        const vp = safePalette(v.direction.palette, v.direction.style);
+        const busy = BUSY.has(v.status) && isRunning(v.id);
+        return (
+          <button
+            key={v.id}
+            onClick={() => {
+              editCarousel((cc) => ({ ...cc, active: v.id }));
+              setIndex(0);
+            }}
+            aria-pressed={on}
+            className={cx("flex shrink-0 items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-[13px] transition-colors", on ? "border-ink bg-surface font-medium shadow-soft" : "border-line bg-surface/60 text-ink-2 hover:bg-surface")}
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full" style={{ background: vp.bg, boxShadow: "inset 0 0 0 1px rgba(0,0,0,.12)" }}>
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: vp.accent }} />
+            </span>
+            <span className="max-w-[9rem] truncate sm:max-w-none">{v.direction.name}</span>
+            <span className="hidden text-faint sm:inline">· {STYLES[v.direction.style]?.name}</span>
+            {busy && <LoaderCircle size={13} className="animate-spin text-accent" />}
+            {!v.slides.length && !busy && (v.status === "error" || v.status === "stopped") && <span className="h-2 w-2 rounded-full bg-danger" title={v.error || "Stopped"} />}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const askBar = (
+    <div className="w-full max-w-2xl rounded-2xl border border-line bg-surface p-2 shadow-soft">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          askPip();
+        }}
+        className="flex flex-wrap items-center gap-2 sm:flex-nowrap"
+      >
+        <Segmented id="ask-scope" size="sm" value={scope} onChange={setScope} options={[{ value: "slide", label: "This slide" }, { value: "all", label: "All slides" }]} />
+        <div className="flex min-w-0 basis-full items-center gap-2 sm:basis-auto sm:flex-1">
+          <input value={ask} onChange={(e) => setAsk(e.target.value)} disabled={asking} placeholder={scope === "slide" ? "Ask Pip to change this slide…" : "Ask Pip to change the carousel…"} className="h-9 min-w-0 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-faint" aria-label="Instruction for Pip" />
+          <Button type="submit" size="sm" variant="accent" icon={asking ? LoaderCircle : Sparkles} disabled={asking || ask.trim().length < 2}>
+            {asking ? "Working" : "Ask"}
+          </Button>
+        </div>
+      </form>
+      <div className="nosb mt-1.5 flex gap-1.5 overflow-x-auto px-1">
+        {QUICK.map((q) => (
+          <button key={q} disabled={asking} onClick={() => askPip(q)} className="shrink-0 rounded-full bg-sunken px-2.5 py-1 text-[11px] text-ink-2 transition-colors hover:text-ink disabled:opacity-50">
+            {q}
+          </button>
+        ))}
+        <button disabled={generating} onClick={regenerate} className="shrink-0 rounded-full px-2.5 py-1 text-[11px] text-mute underline-offset-2 hover:text-ink hover:underline disabled:opacity-50">
+          Rewrite this variation · 2–3 credits
+        </button>
+      </div>
+    </div>
+  );
+
+  const stageBody = stopped ? (
+    <div className="mx-auto mt-10 max-w-sm px-4 text-center">
+      <p className="text-[15px] font-semibold">This variation didn't finish</p>
+      <p className="mt-1 text-sm text-mute">{variant.error || "Generation stopped before any slides were saved."}</p>
+      <Button className="mt-4" icon={RefreshCw} onClick={regenerate}>
+        Generate it again
+      </Button>
+    </div>
+  ) : !slides.length ? (
+    <div className="flex flex-col items-center px-4 pt-4">
+      <div className="animate-pulse rounded-2xl bg-sunken" style={{ width: previewW, height: previewW * ratio }} />
+      <p className="mt-4 flex items-center gap-2 text-sm text-mute">
+        <LoaderCircle size={15} className="animate-spin text-accent" /> Pip is writing “{variant.direction.name}”…
+      </p>
+    </div>
+  ) : (
+    <div className="flex flex-col items-center">
+      <div className="flex items-center gap-2 sm:gap-3">
+        {!touch && <IconButton icon={ChevronLeft} label="Previous slide" disabled={index === 0} onClick={() => setIndex(index - 1)} />}
+        <Stage project={project} variant={variant} index={index} setIndex={setIndex} width={previewW} steps={steps} swipe={touch || !wide} />
+        {!touch && <IconButton icon={ChevronRight} label="Next slide" disabled={index >= slides.length - 1} onClick={() => setIndex(index + 1)} />}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 text-xs text-mute">
+        <span>
+          Slide {index + 1} of {slides.length} · {LAYOUTS.find((l) => l.id === slide.layout)?.label}
+        </span>
+        {(slides.some(searching) || imagesBusy) && (
+          <span className="flex items-center gap-1.5 text-accent">
+            <LoaderCircle size={12} className="animate-spin" /> finding photos
+          </span>
+        )}
+        {!wide && (
+          <span className="flex gap-1" aria-hidden="true">
+            {slides.map((sl, i) => (
+              <span key={sl.id} className={cx("h-1.5 rounded-full transition-all", i === index ? "w-4 bg-ink" : "w-1.5 bg-ink/20")} />
+            ))}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
+  const inspector = (
+    <>
+      <div className="sticky top-0 z-10 border-b border-line-soft bg-surface/95 px-4 py-2.5 backdrop-blur sm:px-5">
+        <Segmented id="inspector-tab" full size="sm" value={tab} onChange={setTab} options={[{ value: "slide", label: "Slide" }, { value: "design", label: "Design" }, { value: "caption", label: "Caption" }]} />
+      </div>
+      {tab === "slide" && slide && (
+        <SlideInspector key={slide.id} slide={slide} index={index} onEdit={editSlide} onPhoto={() => setPicker(true)} onRetry={() => retryPhotos([index])} searching={searching(slide) || imagesBusy} />
+      )}
+      {tab === "slide" && !slide && <p className="p-5 text-sm text-mute">Slides appear here as Pip writes them.</p>}
+      {tab === "design" && <DesignInspector project={project} variant={variant} onEditVariant={editVariant} onEditCarousel={editCarousel} />}
+      {tab === "caption" && <CaptionInspector variant={variant} onEditVariant={editVariant} />}
+    </>
+  );
+
+  const strip = slides.length > 0 && (
+    <SlideStrip project={project} variant={variant} index={index} setIndex={setIndex} steps={steps} vertical={wide} onReorder={reorder} onAdd={addSlide} onDup={dupSlide} onDel={delSlide} />
+  );
 
   return (
-    <div className="flex h-full flex-col bg-canvas">
+    <div className={cx("flex h-full flex-col bg-canvas", !wide && "overflow-y-auto")}>
       {/* Header */}
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-paper/90 px-2 backdrop-blur sm:px-3">
+      <header className={cx("z-20 flex h-14 shrink-0 items-center gap-1.5 border-b border-line bg-paper/95 px-2 backdrop-blur sm:gap-2 sm:px-3", !wide && "sticky top-0")}>
         <IconButton icon={ArrowLeft} label="Back to designs" onClick={() => api.home()} />
         <input
           value={project.name}
           onChange={(e) => api.edit(project.id, (p) => ({ ...p, name: e.target.value.slice(0, 40) }), { silent: true })}
           aria-label="Carousel name"
-          className="min-w-0 max-w-[40vw] flex-1 truncate rounded-lg bg-transparent px-2 py-1 text-[15px] font-semibold outline-none hover:bg-sunken focus:bg-surface sm:max-w-xs"
+          className="min-w-0 flex-1 truncate rounded-lg bg-transparent px-2 py-1 text-[15px] font-semibold outline-none hover:bg-sunken focus:bg-surface sm:max-w-xs"
         />
-        <div className="ml-auto flex items-center gap-1">
-          <span className="mr-1 hidden items-center gap-1.5 rounded-full border border-line px-2.5 py-1 font-mono text-[11px] text-mute md:inline-flex">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <span className="mr-1 hidden items-center gap-1.5 rounded-full border border-line px-2.5 py-1 font-mono text-[11px] text-mute md:inline-flex" title="Credits left today">
             <PipGlyph size={10} /> {left}
           </span>
-          <IconButton icon={Undo2} label="Undo" disabled={!hist?.past.length} onClick={() => api.undo(project.id)} />
-          <IconButton icon={Redo2} label="Redo" disabled={!hist?.future.length} onClick={() => api.redo(project.id)} />
-          <Button variant="secondary" size="sm" icon={Smartphone} className="hidden sm:inline-flex" onClick={() => setPhone(true)} disabled={!slides.length}>
-            Preview
+          <span className="hidden sm:flex">
+            <IconButton icon={Undo2} label="Undo" disabled={!hist?.past.length} onClick={() => api.undo(project.id)} />
+            <IconButton icon={Redo2} label="Redo" disabled={!hist?.future.length} onClick={() => api.redo(project.id)} />
+          </span>
+          <Button variant="secondary" size="sm" icon={Smartphone} onClick={() => setPhone(true)} disabled={!slides.length} aria-label="Feed preview">
+            <span className="hidden sm:inline">Preview</span>
           </Button>
-          <Button variant="primary" size="sm" icon={Download} onClick={() => setExporting(true)} disabled={!slides.length || busy}>
-            Export
+          <Button variant="primary" size="sm" icon={Download} onClick={() => setExporting(true)} disabled={!slides.length || generating} aria-label="Export">
+            <span className="hidden sm:inline">Export</span>
           </Button>
         </div>
       </header>
 
-      {/* Variations */}
-      <div className="nosb flex shrink-0 items-center gap-2 overflow-x-auto border-b border-line-soft bg-paper/60 px-3 py-2">
-        {c.variants.map((v) => {
-          const on = v.id === variant.id;
-          const st = STYLES[v.direction.style] || STYLES.editorial;
-          return (
-            <button
-              key={v.id}
-              onClick={() => {
-                editCarousel((cc) => ({ ...cc, active: v.id }));
-                setIndex(0);
-              }}
-              aria-pressed={on}
-              className={cx("flex shrink-0 items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-[13px] transition-colors", on ? "border-ink bg-surface font-medium" : "border-transparent text-ink-2 hover:bg-surface")}
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full" style={{ background: safePalette(v.direction.palette, v.direction.style).bg, boxShadow: "inset 0 0 0 1px rgba(0,0,0,.1)" }}>
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: safePalette(v.direction.palette, v.direction.style).accent }} />
-              </span>
-              {v.direction.name}
-              <span className="text-faint">· {st.name}</span>
-              {(v.status === "writing" || v.status === "images") && isRunning(v.id) && <LoaderCircle size={13} className="animate-spin text-accent" />}
-              {v.status === "error" && <span className="h-2 w-2 rounded-full bg-danger" title={v.error} />}
-            </button>
-          );
-        })}
-      </div>
+      <div className={cx("shrink-0 border-b border-line-soft bg-paper/70", !wide && "sticky top-14 z-10 backdrop-blur")}>{variationBar}</div>
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* Stage */}
-        <main ref={stage} className="sb flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 pb-4 pt-5">
-          {variant.status === "error" && !slides.length ? (
-            <div className="mt-16 max-w-sm text-center">
-              <p className="text-[15px] font-semibold">This variation didn't come through</p>
-              <p className="mt-1 text-sm text-mute">{variant.error}</p>
-              <Button className="mt-4" icon={RefreshCw} onClick={regenerate}>
-                Try again
-              </Button>
+      {wide ? (
+        <div className="grid min-h-0 flex-1 grid-cols-[136px_minmax(0,1fr)_minmax(340px,380px)] xl:grid-cols-[152px_minmax(0,1fr)_400px]">
+          <aside className="sb min-h-0 overflow-y-auto border-r border-line-soft bg-paper/40" aria-label="Slides">
+            {strip}
+          </aside>
+          <main className="flex min-h-0 flex-col">
+            <div ref={stage} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-6 py-5">
+              {stageBody}
             </div>
-          ) : !slides.length ? (
-            <div className="mt-6 flex flex-col items-center">
-              <div className="animate-pulse rounded-2xl bg-sunken" style={{ width: previewW, height: previewW * (FORMATS[c.format].h / FORMATS[c.format].w) }} />
-              <p className="mt-4 flex items-center gap-2 text-sm text-mute">
-                {interrupted ? (
-                  <>
-                    Generation stopped before it finished.
-                    <Button size="sm" variant="secondary" icon={RefreshCw} onClick={resume}>
-                      Resume
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <LoaderCircle size={15} className="animate-spin text-accent" /> Pip is writing “{variant.direction.name}”…
-                  </>
-                )}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-3">
-                <IconButton icon={ChevronLeft} label="Previous slide" disabled={index === 0} onClick={() => setIndex(index - 1)} />
-                <div className="overflow-hidden rounded-[18px] shadow-lift ring-1 ring-black/5">
-                  <AnimatePresence mode="popLayout" initial={false}>
-                    <motion.div key={slide.id} initial={{ opacity: 0.6 }} animate={{ opacity: 1 }} transition={{ duration: 0.18 }}>
-                      <ScaledSlide width={previewW} slide={slide} index={index} total={slides.length} direction={variant.direction} brand={c.brand} format={c.format} goal={c.plan?.goal} stepNo={steps[index]} />
-                    </motion.div>
-                  </AnimatePresence>
-                </div>
-                <IconButton icon={ChevronRight} label="Next slide" disabled={index >= slides.length - 1} onClick={() => setIndex(index + 1)} />
-              </div>
-              <p className="mt-2.5 flex items-center gap-2 text-xs text-mute">
-                Slide {index + 1} of {slides.length} · {LAYOUTS.find((l) => l.id === slide.layout)?.label}
-                {(variant.status === "images" || imagesBusy) && !interrupted && (
-                  <span className="flex items-center gap-1.5 text-accent">
-                    <LoaderCircle size={12} className="animate-spin" /> finding photos
-                  </span>
-                )}
-                {interrupted && (
-                  <button onClick={resume} className="text-accent underline">
-                    Finish finding photos
-                  </button>
-                )}
-              </p>
-
-              {/* Filmstrip */}
-              <div className="mt-4 w-full max-w-full">
-                <Reorder.Group
-                  axis="x"
-                  values={slides}
-                  onReorder={(next) => {
-                    const cur = slide?.id;
-                    editVariant((v) => ({ ...v, slides: settleLayouts(next) }), "reorder");
-                    const ni = next.findIndex((x) => x.id === cur);
-                    if (ni >= 0) setIndex(ni);
-                  }}
-                  className="nosb mx-auto flex w-fit max-w-full gap-2.5 overflow-x-auto px-1 pb-2 pt-1"
-                >
-                  {slides.map((sl, i) => (
-                    <Reorder.Item key={sl.id} value={sl} className="group relative shrink-0" whileDrag={{ scale: 1.05, zIndex: 10 }}>
-                      <button onClick={() => setIndex(i)} aria-label={`Slide ${i + 1}`} aria-current={i === index} className={cx("block overflow-hidden rounded-lg ring-offset-2 ring-offset-canvas transition", i === index ? "ring-2 ring-ink" : "opacity-80 hover:opacity-100")}>
-                        <ScaledSlide width={78} slide={sl} index={i} total={slides.length} direction={variant.direction} brand={c.brand} format={c.format} goal={c.plan?.goal} stepNo={steps[i]} />
-                      </button>
-                      <span className="pointer-events-none absolute -bottom-0.5 left-1 font-mono text-[10px] text-mute">{i + 1}</span>
-                      <span className="absolute -right-1.5 -top-1.5 hidden gap-0.5 group-hover:flex group-focus-within:flex">
-                        <button onClick={() => dupSlide(i)} aria-label={`Duplicate slide ${i + 1}`} className="flex h-5 w-5 items-center justify-center rounded-full bg-surface shadow ring-1 ring-black/10 hover:bg-wash">
-                          <Copy size={10} />
-                        </button>
-                        <button onClick={() => delSlide(i)} aria-label={`Delete slide ${i + 1}`} className="flex h-5 w-5 items-center justify-center rounded-full bg-surface text-danger shadow ring-1 ring-black/10 hover:bg-wash">
-                          <Trash2 size={10} />
-                        </button>
-                      </span>
-                    </Reorder.Item>
-                  ))}
-                  <button onClick={addSlide} aria-label="Add a slide" className="flex shrink-0 items-center justify-center rounded-lg border border-dashed border-line-strong text-mute transition-colors hover:border-ink hover:text-ink" style={{ width: 78, height: 78 * (FORMATS[c.format].h / FORMATS[c.format].w) }}>
-                    <Plus size={18} />
-                  </button>
-                </Reorder.Group>
-              </div>
-
-              {/* Ask Pip */}
-              <div className="mt-3 w-full max-w-2xl rounded-2xl border border-line bg-surface p-2 shadow-soft">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    askPip();
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <Segmented id="ask-scope" size="sm" value={scope} onChange={setScope} options={[{ value: "slide", label: "This slide" }, { value: "all", label: "All slides" }]} />
-                  <input value={ask} onChange={(e) => setAsk(e.target.value)} disabled={asking} placeholder={scope === "slide" ? "Ask Pip to change this slide…" : "Ask Pip to change the carousel…"} className="h-9 min-w-0 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-faint" aria-label="Instruction for Pip" />
-                  <Button type="submit" size="sm" variant="accent" icon={asking ? LoaderCircle : Sparkles} disabled={asking || ask.trim().length < 2}>
-                    {asking ? "Working" : "Ask"}
-                  </Button>
-                </form>
-                <div className="nosb mt-1.5 flex gap-1.5 overflow-x-auto px-1">
-                  {QUICK.map((q) => (
-                    <button key={q} disabled={asking} onClick={() => askPip(q)} className="shrink-0 rounded-full bg-sunken px-2.5 py-1 text-[11px] text-ink-2 transition-colors hover:text-ink disabled:opacity-50">
-                      {q}
-                    </button>
-                  ))}
-                  <button disabled={busy} onClick={regenerate} className="shrink-0 rounded-full px-2.5 py-1 text-[11px] text-mute underline-offset-2 hover:text-ink hover:underline disabled:opacity-50">
-                    Rewrite this variation · 2–3 credits
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </main>
-
-        {/* Inspector */}
-        <aside className="sb shrink-0 overflow-y-auto border-t border-line bg-surface lg:w-[340px] lg:border-l lg:border-t-0">
-          <div className="sticky top-0 z-10 border-b border-line-soft bg-surface/95 px-4 py-2.5 backdrop-blur">
-            <Segmented id="inspector-tab" full size="sm" value={tab} onChange={setTab} options={[{ value: "slide", label: "Slide" }, { value: "design", label: "Design" }, { value: "caption", label: "Caption" }]} />
-          </div>
-          <div className="p-4">
-            {tab === "slide" && slide && <SlideInspector key={slide.id} project={project} variant={variant} slide={slide} index={index} onEdit={editSlide} onPhoto={() => setPicker(true)} busyImages={(variant.status === "images" && isRunning(variant.id)) || imagesBusy} />}
-            {tab === "slide" && !slide && <p className="text-sm text-mute">Slides appear here as Pip writes them.</p>}
-            {tab === "design" && <DesignInspector project={project} variant={variant} onEditVariant={editVariant} onEditCarousel={editCarousel} />}
-            {tab === "caption" && <CaptionInspector variant={variant} onEditVariant={editVariant} />}
-          </div>
-        </aside>
-      </div>
+            <div className="flex shrink-0 justify-center border-t border-line-soft bg-paper/40 px-6 py-3">{askBar}</div>
+          </main>
+          <aside className="sb min-h-0 overflow-y-auto border-l border-line bg-surface" aria-label="Inspector">
+            {inspector}
+          </aside>
+        </div>
+      ) : (
+        <>
+          <main ref={stage} className="shrink-0 pb-2 pt-4">
+            {stageBody}
+          </main>
+          {strip && <div className="shrink-0">{strip}</div>}
+          {slides.length > 0 && <div className="flex shrink-0 justify-center px-3 pb-4 sm:px-4">{askBar}</div>}
+          <aside className="shrink-0 border-t border-line bg-surface" aria-label="Inspector">
+            <div className="mx-auto max-w-2xl">{inspector}</div>
+          </aside>
+        </>
+      )}
 
       <AnimatePresence>
         {picker && slide && (
@@ -809,7 +965,7 @@ export function CarouselStudio() {
             onClose={() => setPicker(false)}
             onPick={(img) => {
               const id = slide.id;
-              editProject((p) => withSlide(p, variant.id, id, (sl) => ({ ...sl, img, image: { ...sl.image, use: true } })));
+              editProject((p) => withSlide(p, variant.id, id, (sl) => ({ ...sl, img, image: { ...sl.image, use: true, status: "ok" } })));
             }}
           />
         )}

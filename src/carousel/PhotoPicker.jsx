@@ -10,6 +10,8 @@ const SOURCE_LABEL = { web: "Web", wikimedia: "Wikimedia", openverse: "Openverse
 
 export function PhotoPicker({ project, variant, slide, onPick, onClose }) {
   const c = project.carousel;
+  // Results are shown at the carousel's own shape, so the crop matches.
+  const ratio = c.format === "1:1" ? "1 / 1" : c.format === "3:4" ? "3 / 4" : "4 / 5";
   const [query, setQuery] = useState(slide.image?.query || slide.title || "");
   const [licensed, setLicensed] = useState(!!c.licensed);
   const [list, setList] = useState(() => candidatesFor(slide.id) || []);
@@ -91,10 +93,10 @@ export function PhotoPicker({ project, variant, slide, onPick, onClose }) {
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {busy === "search" && !list.length
-          ? Array.from({ length: 8 }, (_, i) => <div key={i} className="aspect-[4/5] animate-pulse rounded-xl bg-sunken" />)
+          ? Array.from({ length: 8 }, (_, i) => <div key={i} className="animate-pulse rounded-xl bg-sunken" style={{ aspectRatio: ratio }} />)
           : list.map((cand) => (
               <figure key={cand.id} className="group relative">
-                <button onClick={() => pick(cand)} disabled={!!busy} className={cx("relative block aspect-[4/5] w-full overflow-hidden rounded-xl bg-sunken ring-offset-2 transition focus-visible:ring-2 focus-visible:ring-ink", slide.img?.id === cand.id && "ring-2 ring-accent")}>
+                <button onClick={() => pick(cand)} disabled={!!busy} style={{ aspectRatio: ratio }} className={cx("relative block w-full overflow-hidden rounded-xl bg-sunken ring-offset-2 transition focus-visible:ring-2 focus-visible:ring-ink", slide.img?.id === cand.id && "ring-2 ring-accent")}>
                   <img src={cand.thumb} alt={cand.title || "Search result"} loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
                   {busy === cand.id && (
                     <span className="absolute inset-0 flex items-center justify-center bg-black/40">

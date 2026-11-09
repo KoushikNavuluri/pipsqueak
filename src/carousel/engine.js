@@ -2,6 +2,7 @@
 // Generation runs outside any component, so leaving the editor doesn't stop it.
 import { askCarousel } from "../ai/client";
 import { needsImage, normalizeSlide, slidesForApi, withVariant } from "./model";
+import { uid } from "../util";
 
 // Search results per slide, kept for the session (not saved with the design).
 const candidates = new Map();
@@ -44,8 +45,44 @@ async function waitForProject(api, id, tries = 60) {
   return null;
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Slides from a write get ids derived from the run, so a result recovered
+// after a reload has the same ids the photo search was keyed on.
+const slidesFromWrite = (result, run) =>
+  result.slides.map((s, i) => {
+    const slide = normalizeSlide({ ...s, id: `${run}-${i}` });
+    return slide.image?.use && !slide.img?.src ? { ...slide, image: { ...slide.image, status: "searching" } } : slide;
+  });
+
+// Applies a photo-search result: by slide id (by position for old results).
+// A photo the user picked meanwhile is never replaced.
+export function applyImages(slides, result) {
+  const rows = result?.slides || [];
+  const byId = new Map(rows.filter((r) => r.id).map((r) => [r.id, r]));
+  const byIndex = new Map(rows.filter((r) => !r.id).map((r) => [r.index, r]));
+  return slides.map((s, i) => {
+    const r = byId.get(s.id) || byIndex.get(i);
+    if (!r) return s;
+    rememberCandidates(s.id, r.candidates);
+    if (s.img?.src) return { ...s, image: { ...s.image, status: "ok" } };
+    return r.chosen ? { ...s, img: r.chosen, image: { ...s.image, status: "ok" } } : { ...s, image: { ...s.image, status: "none" } };
+  });
+}
+
+const recover = async (projectId, variantId, run) => {
+  try {
+    const { result } = await askCarousel("recover", { projectId, variantId, run });
+    return result || {};
+  } catch {
+    return {};
+  }
+};
+
 // Writes one variation, then finds its photos (and paints illustrations).
-export function buildVariant({ api, projectId, variantId, request }) {
+// Every step's result is also kept on the server for this run, so after a
+// reload `resumeVariant` picks up where it stopped without paying again.
+export function buildVariant({ api, projectId, variantId, request, fresh = false }) {
   if (running.has(variantId)) return running.get(variantId);
   let finish;
   const job = new Promise((r) => (finish = r));
@@ -59,26 +96,40 @@ export function buildVariant({ api, projectId, variantId, request }) {
       console.error("Carousel variation not found", projectId, variantId);
       return;
     }
+    const run = fresh || !v0.run ? uid() : v0.run;
     try {
-      edit((v) => ({ ...v, status: "writing", error: "" }));
-      const { result } = await askCarousel("write", {
-        topic: c.topic,
-        notes: c.notes,
-        sourceText: request?.sourceText || "",
-        brand: brandOf(c),
-        plan: c.plan,
-        direction: v0.direction,
-        tone: c.tone,
-        quality: request?.quality,
-      });
-      const slides = result.slides.map(normalizeSlide);
-      edit((v) => ({ ...v, slides, caption: result.caption, hashtags: result.hashtags, status: "images" }));
-      // Pass the new slides along: the store may not have them yet.
-      await findImages({ api, projectId, variantId, slides });
+      edit((v) => ({ ...v, run, startedAt: v.run === run ? v.startedAt || Date.now() : Date.now(), status: "writing", error: "" }));
+      const saved = fresh || !v0.run ? {} : await recover(projectId, variantId, run);
+      const written =
+        saved.write ||
+        (
+          await askCarousel("write", {
+            topic: c.topic,
+            notes: c.notes,
+            sourceText: request?.sourceText || "",
+            brand: brandOf(c),
+            plan: c.plan,
+            direction: v0.direction,
+            tone: c.tone,
+            quality: request?.quality,
+            projectId,
+            variantId,
+            run,
+          })
+        ).result;
+      const slides = slidesFromWrite(written, run);
+      edit((v) => ({ ...v, slides, caption: written.caption, hashtags: written.hashtags, status: "images" }));
+      if (saved.images) edit((v) => ({ ...v, slides: applyImages(v.slides, saved.images) }));
+      else await findImages({ api, projectId, variantId, slides, run });
       edit((v) => ({ ...v, status: "ready" }));
     } catch (err) {
       console.error("Carousel variation failed", err);
-      edit((v) => ({ ...v, status: v.slides.length ? "ready" : "error", error: err.message || "Something went wrong." }));
+      edit((v) => ({
+        ...v,
+        status: v.slides.length ? "ready" : "error",
+        error: err.message || "Something went wrong.",
+        slides: v.slides.map((s) => (s.image?.status === "searching" ? { ...s, image: { ...s.image, status: "none" } } : s)),
+      }));
       if (err.status === 429) api.toast(err.message, { tone: "error" });
     }
   })().finally(() => {
@@ -90,10 +141,61 @@ export function buildVariant({ api, projectId, variantId, request }) {
 
 export const isRunning = (variantId) => running.has(variantId);
 
+// After a reload: a variation still marked as generating is finished from
+// the results saved on the server. A write that is still in flight there is
+// waited for (up to two minutes after it started); only then is the
+// variation marked as stopped.
+export function resumeVariant({ api, projectId, variantId }) {
+  if (running.has(variantId)) return running.get(variantId);
+  let finish;
+  const job = new Promise((r) => (finish = r));
+  running.set(variantId, job);
+  (async () => {
+    const edit = (fn) => api.edit(projectId, (p) => withVariant(p, variantId, fn), { silent: true });
+    const p0 = await waitForProject(api, projectId);
+    const v0 = p0?.carousel?.variants.find((v) => v.id === variantId);
+    if (!v0) return;
+    if (!v0.run) {
+      edit((v) => ({ ...v, status: v.slides.length ? "ready" : "stopped" }));
+      return;
+    }
+    const deadline = (v0.startedAt || 0) + 120_000;
+    let saved = await recover(projectId, variantId, v0.run);
+    while (!saved.write && !v0.slides.length && Date.now() < deadline) {
+      await sleep(4000);
+      saved = await recover(projectId, variantId, v0.run);
+    }
+    try {
+      // Work from the slides in hand: an edit reaches the store only on the
+      // next render, so reading it back here would still see the old list.
+      let slides = v0.slides;
+      if (saved.write && !slides.length) {
+        slides = slidesFromWrite(saved.write, v0.run);
+        edit((v) => ({ ...v, slides, caption: saved.write.caption, hashtags: saved.write.hashtags, status: "images" }));
+      }
+      if (!slides.length) {
+        edit((v) => ({ ...v, status: "stopped" }));
+        return;
+      }
+      edit((v) => ({ ...v, status: "images" }));
+      if (saved.images) edit((v) => ({ ...v, slides: applyImages(v.slides, saved.images) }));
+      else await findImages({ api, projectId, variantId, slides, run: v0.run });
+      edit((v) => ({ ...v, status: "ready" }));
+    } catch (err) {
+      console.error("Resuming failed", err);
+      edit((v) => ({ ...v, status: v.slides.length ? "ready" : "stopped", slides: v.slides.map((s) => (s.image?.status === "searching" ? { ...s, image: { ...s.image, status: "none" } } : s)) }));
+    }
+  })().finally(() => {
+    running.delete(variantId);
+    finish();
+  });
+  return job;
+}
+
 // Finds photos for the slides that need one (all, or `only` these indexes).
 // `slides` is the current list when the caller just changed it (the store
 // catches up on the next render); otherwise the stored slides are used.
-export async function findImages({ api, projectId, variantId, only, slides: given }) {
+export async function findImages({ api, projectId, variantId, only, slides: given, run }) {
   const p = await waitForProject(api, projectId);
   const c = p?.carousel;
   const found = c?.variants.find((x) => x.id === variantId);
@@ -102,46 +204,47 @@ export async function findImages({ api, projectId, variantId, only, slides: give
   const idx = only || needsImage(v.slides);
   if (!idx.length) return;
   const edit = (fn) => api.edit(projectId, (pp) => withVariant(pp, variantId, fn), { silent: true });
+  const targets = new Set(idx.map((i) => v.slides[i]?.id).filter(Boolean));
+  const mark = (status) => edit((vv) => ({ ...vv, slides: vv.slides.map((s) => (targets.has(s.id) && !s.img?.src ? { ...s, image: { ...s.image, status } } : s)) }));
+  mark("searching");
   const illustrated = v.direction.imageApproach === "illustrated";
   const photoIdx = idx.filter((i) => v.slides[i]?.image?.kind !== "illustration" && !illustrated);
   const paintIdx = idx.filter((i) => !photoIdx.includes(i)).slice(0, 3);
-
-  if (photoIdx.length) {
-    const { result } = await askCarousel("images", {
-      topic: c.topic,
-      slides: slidesForApi(v.slides),
-      only: photoIdx,
-      style: v.direction.style,
-      treatment: v.direction.treatment,
-      licensed: c.licensed,
-      projectId,
-    });
-    const byIndex = new Map(result.slides.map((s) => [s.index, s]));
-    for (const s of result.slides) rememberCandidates(v.slides[s.index]?.id, s.candidates);
-    edit((vv) => ({
-      ...vv,
-      slides: vv.slides.map((s, i) => {
-        const got = byIndex.get(i);
-        // Don't overwrite a photo the user picked while we were searching.
-        return got?.chosen && !s.img?.src ? { ...s, img: got.chosen } : s;
-      }),
-    }));
-  }
-  for (const i of paintIdx) {
-    const slide = v.slides[i];
-    try {
-      const { result } = await askCarousel("paint", {
-        subject: slide.image.subject || slide.image.query || slide.title,
+  try {
+    if (photoIdx.length) {
+      const { result } = await askCarousel("images", {
+        topic: c.topic,
+        slides: slidesForApi(v.slides),
+        ids: v.slides.map((s) => s.id),
+        only: photoIdx,
         style: v.direction.style,
-        palette: v.direction.palette,
-        aspect: c.format,
+        treatment: v.direction.treatment,
+        licensed: c.licensed,
         projectId,
+        variantId,
+        run: run || found.run,
       });
-      edit((vv) => ({ ...vv, slides: vv.slides.map((s) => (s.id === slide.id && !s.img?.src ? { ...s, img: result.image } : s)) }));
-    } catch (err) {
-      console.error("Painting failed", err);
-      if (err.status === 429) throw err;
+      edit((vv) => ({ ...vv, slides: applyImages(vv.slides, result) }));
     }
+    for (const i of paintIdx) {
+      const slide = v.slides[i];
+      try {
+        const { result } = await askCarousel("paint", {
+          subject: slide.image.subject || slide.image.query || slide.title,
+          style: v.direction.style,
+          palette: v.direction.palette,
+          aspect: c.format,
+          projectId,
+        });
+        edit((vv) => ({ ...vv, slides: vv.slides.map((s) => (s.id === slide.id && !s.img?.src ? { ...s, img: result.image, image: { ...s.image, status: "ok" } } : s)) }));
+      } catch (err) {
+        console.error("Painting failed", err);
+        if (err.status === 429) throw err;
+      }
+    }
+  } finally {
+    // Anything still searching (a failed request) has no photo.
+    edit((vv) => ({ ...vv, slides: vv.slides.map((s) => (targets.has(s.id) && !s.img?.src && s.image?.status === "searching" ? { ...s, image: { ...s.image, status: "none" } } : s)) }));
   }
 }
 

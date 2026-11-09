@@ -47,7 +47,7 @@ export const emptySlide = (layout = "statement") => ({
   stat: { value: "", label: "" },
   quote: { text: "", by: "" },
   source: "",
-  image: { use: PHOTO_LAYOUTS.has(layout), kind: "photo", query: "", altQuery: "", subject: "" },
+  image: { use: PHOTO_LAYOUTS.has(layout), kind: "photo", query: "", altQuery: "", subject: "", ...(PHOTO_LAYOUTS.has(layout) ? { status: "empty" } : {}) },
   alt: "",
   img: null,
 });
