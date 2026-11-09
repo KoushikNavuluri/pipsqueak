@@ -2,6 +2,7 @@ import { SUPABASE_KEY, SUPABASE_URL, supabase } from "../supabase";
 import { resetInLabel, resetTimeLabel } from "../credits";
 
 const ENDPOINT = `${SUPABASE_URL}/functions/v1/ai`;
+const CAROUSEL_ENDPOINT = `${SUPABASE_URL}/functions/v1/carousel`;
 
 export class AiError extends Error {
   constructor(message, { status = 0, quota = null } = {}) {
@@ -24,10 +25,10 @@ async function headers() {
   };
 }
 
-async function post(body, signal) {
+async function post(body, signal, endpoint = ENDPOINT) {
   let res;
   try {
-    res = await fetch(ENDPOINT, {
+    res = await fetch(endpoint, {
       method: "POST",
       headers: await headers(),
       body: JSON.stringify(body),
@@ -63,6 +64,12 @@ async function post(body, signal) {
 // One request, one JSON answer. Resolves to { result, quota }.
 export async function askAi(action, payload, { signal } = {}) {
   const res = await post({ action, ...payload }, signal);
+  return res.json();
+}
+
+// The carousel engine (supabase/functions/carousel). Resolves to { result, quota }.
+export async function askCarousel(action, payload, { signal } = {}) {
+  const res = await post({ action, ...payload }, signal, CAROUSEL_ENDPOINT);
   return res.json();
 }
 

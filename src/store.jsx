@@ -386,6 +386,8 @@ export function StoreProvider({ children, userId, cloud }) {
   const api = useMemo(
     () => ({
       toast,
+      // The latest copy of a design, for work that outlives a render (generation).
+      get: (id) => latest.current.data.projects.find((p) => p.id === id) || null,
       home: () => dispatch({ t: "VIEW", view: "home" }),
       open: (id) => dispatch({ t: "OPEN", id }),
       startGen: (request) => dispatch({ t: "GEN_START", request }),

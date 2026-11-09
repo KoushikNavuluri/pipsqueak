@@ -417,3 +417,7 @@ enabled = true
 [functions.ai]
 # The function verifies the user's session itself, so the gateway check is off.
 verify_jwt = false
+
+[functions.carousel]
+# Same as ai: the function verifies the session itself.
+verify_jwt = false

@@ -34,6 +34,15 @@ const ACTIONS = {
   critique: "Reviewed a design",
   brief: "Refined an idea",
   image: "Painted an image",
+  carousel_plan: "Planned a carousel",
+  carousel_write: "Wrote a carousel",
+  carousel_images: "Picked carousel photos",
+  carousel_refine: "Edited a carousel",
+  carousel_paint: "Painted a carousel image",
+  carousel_search: "Searched for a photo",
+  carousel_pin: "Added a photo",
+  carousel_upload: "Uploaded a photo",
+  carousel_read: "Read a web page",
 };
 
 function Panel({ id, title, description, children, footer, tone }) {

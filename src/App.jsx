@@ -20,7 +20,11 @@ const PollView = lazy(() => import("./pages/PollView").then((m) => ({ default: m
 const InviteAccept = lazy(() => import("./pages/InviteAccept").then((m) => ({ default: m.InviteAccept })));
 const CanvasStudio = lazy(() => load.studio().then((m) => ({ default: m.CanvasStudio })));
 const CreateFlow = lazy(() => load.create().then((m) => ({ default: m.CreateFlow })));
+const CarouselStudio = lazy(() => import("./carousel/CarouselStudio").then((m) => ({ default: m.CarouselStudio })));
 const NotFound = lazy(() => import("./pages/NotFound").then((m) => ({ default: m.NotFound })));
+
+// Kinds of design that open in an editor: the screen canvas and carousels.
+const OPENABLE = new Set(["canvas", "carousel"]);
 
 // Keeps the open design and the address bar in step: /app is the dashboard
 // and /app/p/:id a design. On first render the address bar wins; after that,
@@ -40,7 +44,7 @@ function useRouteSync() {
     if (urlChanged) {
       if (!urlId) {
         api.home();
-      } else if (s.data.projects.some((p) => p.id === urlId && p.kind === "canvas")) {
+      } else if (s.data.projects.some((p) => p.id === urlId && OPENABLE.has(p.kind))) {
         api.open(urlId);
       } else {
         navigate("/app", { replace: true });
@@ -55,7 +59,7 @@ function useRouteSync() {
 function Shell() {
   const { s } = useStore();
   useRouteSync();
-  const active = s.view === "studio" ? s.data.projects.find((p) => p.id === s.data.activeId && p.kind === "canvas") : null;
+  const active = s.view === "studio" ? s.data.projects.find((p) => p.id === s.data.activeId && OPENABLE.has(p.kind)) : null;
   return (
     <div className="h-full w-full bg-paper">
       {/* The next view replaces the last one at once and fades in; holding a
@@ -67,7 +71,7 @@ function Shell() {
         transition={{ duration: 0.22, ease: "easeOut" }}
         className="h-full w-full"
       >
-        <Suspense fallback={<Splash />}>{active ? <CanvasStudio /> : <Dashboard />}</Suspense>
+        <Suspense fallback={<Splash />}>{active ? active.kind === "carousel" ? <CarouselStudio /> : <CanvasStudio /> : <Dashboard />}</Suspense>
       </motion.div>
       <AnimatePresence>
         {s.gen && (

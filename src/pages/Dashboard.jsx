@@ -1,7 +1,7 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, forwardRef, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, Copy, Ellipsis, Globe, ImagePlus, Monitor, PenLine, Search, Smartphone, Star, Trash2, Wand, X } from "lucide-react";
+import { ArrowRight, ArrowUp, Copy, Ellipsis, GalleryHorizontal, Globe, ImagePlus, Monitor, PenLine, Plus, Search, Smartphone, Star, Trash2, Wand, X } from "lucide-react";
 import { useStore } from "../store";
 import { displayName, useSession } from "../session";
 import { Aura, Logo, PipGlyph } from "../brand";
@@ -18,6 +18,11 @@ import { UserMenu } from "./UserMenu";
 import { WorkspaceSwitcher } from "../components/WorkspaceSwitcher";
 import { WorkspaceModal } from "../components/WorkspaceModal";
 import { NotificationBell } from "../components/NotificationBell";
+
+const CarouselCard = lazy(() => import("../carousel/CarouselCard").then((m) => ({ default: m.CarouselCard })));
+const CarouselCreate = lazy(() => import("../carousel/CarouselCreate").then((m) => ({ default: m.CarouselCreate })));
+
+const DESIGN_KINDS = new Set(["canvas", "carousel"]);
 
 const IDEAS = [
   "A zine-style app for an independent music festival in Goa",
@@ -383,8 +388,9 @@ export function Dashboard() {
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [workspaceModal, setWorkspaceModal] = useState(null);
   const showcase = useShowcase();
-  const canvas = s.data.projects.filter((p) => p.kind === "canvas" && (activeWorkspace ? p.workspace_id === activeWorkspace.id : !p.workspace_id));
-  const legacy = s.data.projects.filter((p) => p.kind !== "canvas");
+  const [carouselOpen, setCarouselOpen] = useState(false);
+  const canvas = s.data.projects.filter((p) => DESIGN_KINDS.has(p.kind) && (activeWorkspace ? p.workspace_id === activeWorkspace.id : !p.workspace_id));
+  const legacy = s.data.projects.filter((p) => !DESIGN_KINDS.has(p.kind));
   const first = displayName(user, profile).split(/[\s.@_]/)[0];
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -467,6 +473,22 @@ export function Dashboard() {
           <div className="mt-10">
             <Composer />
           </div>
+          <motion.button
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.5, ease: EASE }}
+            onClick={() => setCarouselOpen(true)}
+            className="group mx-auto mt-8 flex items-center gap-3 rounded-full border border-line bg-surface/80 py-1.5 pl-1.5 pr-4 text-left text-sm shadow-soft transition-[border-color,box-shadow] hover:border-line-strong hover:shadow-lift"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#FF4D1A] via-[#E1306C] to-[#7B3FE4] text-white">
+              <GalleryHorizontal size={15} />
+            </span>
+            <span>
+              <span className="font-medium">New: Instagram carousels</span>
+              <span className="hidden text-mute sm:inline"> · one idea in, scroll-stopping slides out</span>
+            </span>
+            <ArrowRight size={15} className="text-mute transition-transform group-hover:translate-x-0.5" />
+          </motion.button>
         </section>
 
         <section aria-labelledby="designs" className="pt-2">
@@ -477,6 +499,10 @@ export function Dashboard() {
               </h2>
               {canvas.length > 0 && <p className="mt-1 text-sm text-mute">{canvas.length === 1 ? "One design" : `${canvas.length} designs`}, saved as you work.</p>}
             </div>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" icon={Plus} onClick={() => setCarouselOpen(true)}>
+                New carousel
+              </Button>
             {canvas.length > 3 && (
               <div className="flex items-center gap-2">
                 <label className="relative">
@@ -503,6 +529,7 @@ export function Dashboard() {
                 )}
               </div>
             )}
+            </div>
           </div>
           {canvas.length === 0 ? (
             <EmptyState />
@@ -511,9 +538,15 @@ export function Dashboard() {
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               <AnimatePresence mode="popLayout">
-                {shown.map((p, i) => (
-                  <ProjectCard key={p.id} p={p} index={i} />
-                ))}
+                {shown.map((p, i) =>
+                  p.kind === "carousel" ? (
+                    <Suspense key={p.id} fallback={<div className="h-[276px] animate-pulse rounded-3xl bg-sunken" />}>
+                      <CarouselCard p={p} index={i} />
+                    </Suspense>
+                  ) : (
+                    <ProjectCard key={p.id} p={p} index={i} />
+                  ),
+                )}
               </AnimatePresence>
             </div>
           )}
@@ -540,6 +573,9 @@ export function Dashboard() {
         )}
       </main>
       <AnimatePresence>{viewing && <ShowcaseViewer key="viewer" item={viewing} onClose={() => setViewing(null)} onRemix={remix} />}</AnimatePresence>
+      <Suspense fallback={null}>
+        <AnimatePresence>{carouselOpen && <CarouselCreate key="carousel" onClose={() => setCarouselOpen(false)} />}</AnimatePresence>
+      </Suspense>
       {workspaceModal && (
         <WorkspaceModal
           workspace={workspaceModal.workspace}

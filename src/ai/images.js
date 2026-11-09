@@ -43,9 +43,15 @@ export async function toAttachment(file) {
   };
 }
 
-// Deletes every artwork file in the user's folder (one subfolder per project).
+// Deletes every artwork and carousel image in the user's folders (one
+// subfolder per project).
 export async function removeAllArtwork(userId) {
-  const bucket = supabase.storage.from("artwork");
+  await removeFolders("artwork", userId);
+  await removeFolders("carousel-media", userId);
+}
+
+async function removeFolders(bucketId, userId) {
+  const bucket = supabase.storage.from(bucketId);
   const { data: folders } = await bucket.list(userId, { limit: 1000 });
   for (const folder of folders || []) {
     const { data: files } = await bucket.list(`${userId}/${folder.name}`, {
