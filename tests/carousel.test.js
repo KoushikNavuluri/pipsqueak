@@ -121,3 +121,15 @@ describe("PDF export", () => {
     offsets.forEach((off, i) => expect(text.slice(off, off + `${i + 1} 0 obj`.length)).toBe(`${i + 1} 0 obj`));
   });
 });
+
+describe("carousel mobile preview sizing", () => {
+  it("computes preview width constrained by window and aspect ratio", () => {
+    const ratio = 1.25; // 4:5
+    const windowW = 390;
+    const windowH = 844;
+    const sizeW = 0; // fallback before observer
+    const previewW = Math.max(220, Math.min((sizeW || windowW) - 32, 520, (windowH * 0.58) / ratio));
+    expect(previewW).toBe(358);
+    expect(previewW * ratio).toBeLessThan(windowH * 0.6);
+  });
+});

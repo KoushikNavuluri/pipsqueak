@@ -10,8 +10,10 @@ import {
   AlertCircle,
   ArrowLeft,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Copy,
   Crosshair,
   Download,
@@ -649,6 +651,7 @@ export function CarouselStudio() {
   const variant = activeVariant(project);
   const [index, setIndex] = useState(0);
   const [tab, setTab] = useState("slide");
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [picker, setPicker] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [phone, setPhone] = useState(false);
@@ -657,6 +660,7 @@ export function CarouselStudio() {
   const [asking, setAsking] = useState(false);
   const [imagesBusy, setImagesBusy] = useState(false);
   const stage = useRef(null);
+  const touchStartY = useRef(null);
   const size = useElementSize(stage);
   const wide = useMedia("(min-width: 1024px)");
   const touch = useMedia("(pointer: coarse)");
@@ -776,7 +780,7 @@ export function CarouselStudio() {
   // Preview size: as large as the stage allows.
   const previewW = wide
     ? Math.max(240, Math.min(size.w - 120, (size.h - 60) / ratio, 600))
-    : Math.max(220, Math.min((size.w || 360) - 32, 520, (typeof window !== "undefined" ? window.innerHeight * 0.62 : 600) / ratio));
+    : Math.max(220, Math.min((size.w || (typeof window !== "undefined" ? window.innerWidth : 360)) - 32, 520, (typeof window !== "undefined" ? window.innerHeight * 0.58 : 500) / ratio));
 
   const variationBar = (
     <div className="nosb flex items-center gap-2 overflow-x-auto px-3 py-2 sm:px-4">
@@ -898,9 +902,9 @@ export function CarouselStudio() {
   );
 
   return (
-    <div className={cx("flex h-full flex-col bg-canvas", !wide && "overflow-y-auto")}>
+    <div className={cx("flex h-full flex-col bg-canvas", !wide && "overflow-hidden relative")}>
       {/* Header */}
-      <header className={cx("z-20 flex h-14 shrink-0 items-center gap-1.5 border-b border-line bg-paper/95 px-2 backdrop-blur sm:gap-2 sm:px-3", !wide && "sticky top-0")}>
+      <header className="z-20 flex h-14 shrink-0 items-center gap-1.5 border-b border-line bg-paper/95 px-2 backdrop-blur sm:gap-2 sm:px-3">
         <IconButton icon={ArrowLeft} label="Back to designs" onClick={() => api.home()} />
         <input
           value={project.name}
@@ -925,7 +929,7 @@ export function CarouselStudio() {
         </div>
       </header>
 
-      <div className={cx("shrink-0 border-b border-line-soft bg-paper/70", !wide && "sticky top-14 z-10 backdrop-blur")}>{variationBar}</div>
+      <div className="shrink-0 border-b border-line-soft bg-paper/70">{variationBar}</div>
 
       {wide ? (
         <div className="grid min-h-0 flex-1 grid-cols-[136px_minmax(0,1fr)_minmax(340px,380px)] xl:grid-cols-[152px_minmax(0,1fr)_400px]">
@@ -943,16 +947,145 @@ export function CarouselStudio() {
           </aside>
         </div>
       ) : (
-        <>
-          <main ref={stage} className="shrink-0 pb-2 pt-4">
-            {stageBody}
-          </main>
-          {strip && <div className="shrink-0">{strip}</div>}
-          {slides.length > 0 && <div className="flex shrink-0 justify-center px-3 pb-4 sm:px-4">{askBar}</div>}
-          <aside className="shrink-0 border-t border-line bg-surface" aria-label="Inspector">
-            <div className="mx-auto max-w-2xl">{inspector}</div>
-          </aside>
-        </>
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          {/* Scrollable Stage Area: slide preview, strip, and ask bar */}
+          <div className="flex-1 overflow-y-auto pb-3">
+            <main ref={stage} className="shrink-0 pb-2 pt-3">
+              {stageBody}
+            </main>
+            {strip && <div className="shrink-0">{strip}</div>}
+            {slides.length > 0 && <div className="flex shrink-0 justify-center px-3 pb-2 sm:px-4">{askBar}</div>}
+          </div>
+
+          {/* Compact bottom dock: visible at the bottom of the screen */}
+          <div className="shrink-0 border-t border-line bg-surface/95 px-3 py-2 backdrop-blur">
+            <div className="mx-auto flex max-w-md items-center gap-2">
+              <div className="flex-1">
+                <Segmented
+                  id="mobile-inspector-dock"
+                  full
+                  size="sm"
+                  value={tab}
+                  onChange={(nextTab) => {
+                    setTab(nextTab);
+                    setMobileOpen(true);
+                  }}
+                  options={[
+                    { value: "slide", label: "Slide" },
+                    { value: "design", label: "Design" },
+                    { value: "caption", label: "Caption" },
+                  ]}
+                />
+              </div>
+              <button
+                onClick={() => setMobileOpen((o) => !o)}
+                className="flex h-8 items-center gap-1 rounded-full bg-sunken px-2.5 text-xs font-medium text-ink-2 hover:bg-line hover:text-ink transition-colors"
+                aria-label={mobileOpen ? "Bring down panel" : "Open editor panel"}
+                title={mobileOpen ? "Bring down panel" : "Open editor panel"}
+              >
+                {mobileOpen ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+                <span>{mobileOpen ? "Hide" : "Edit"}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile Bottom Sheet Overlay */}
+          <AnimatePresence>
+            {mobileOpen && (
+              <>
+                <motion.div
+                  key="sheet-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  onClick={() => setMobileOpen(false)}
+                  className="absolute inset-0 z-30 bg-black/35 backdrop-blur-[1px]"
+                  aria-label="Bring down panel"
+                />
+
+                <motion.div
+                  key="sheet-panel"
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  transition={{ type: "spring", damping: 28, stiffness: 320 }}
+                  className="absolute inset-x-0 bottom-0 z-40 flex max-h-[78vh] flex-col rounded-t-3xl border-t border-line bg-surface shadow-lift"
+                  role="dialog"
+                  aria-label="Carousel editor"
+                >
+                  {/* Sheet Header: Pull handle + tabs + Bring down button */}
+                  <div
+                    className="shrink-0 border-b border-line-soft bg-surface/95 px-3 pb-2 pt-2 backdrop-blur"
+                    onTouchStart={(e) => {
+                      touchStartY.current = e.touches[0].clientY;
+                    }}
+                    onTouchEnd={(e) => {
+                      if (touchStartY.current !== null) {
+                        const delta = e.changedTouches[0].clientY - touchStartY.current;
+                        if (delta > 40) setMobileOpen(false);
+                        touchStartY.current = null;
+                      }
+                    }}
+                  >
+                    <div
+                      className="mx-auto -mt-0.5 mb-1.5 flex h-4 w-20 cursor-pointer touch-none items-center justify-center active:opacity-70"
+                      onClick={() => setMobileOpen(false)}
+                      title="Bring down panel to see carousel"
+                      aria-label="Bring down panel to see carousel"
+                    >
+                      <div className="h-1.5 w-12 rounded-full bg-line-strong hover:bg-mute" />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <Segmented
+                          id="mobile-sheet-tab"
+                          full
+                          size="sm"
+                          value={tab}
+                          onChange={(nextTab) => {
+                            if (nextTab === tab) {
+                              setMobileOpen(false);
+                            } else {
+                              setTab(nextTab);
+                            }
+                          }}
+                          options={[
+                            { value: "slide", label: "Slide" },
+                            { value: "design", label: "Design" },
+                            { value: "caption", label: "Caption" },
+                          ]}
+                        />
+                      </div>
+                      <button
+                        onClick={() => setMobileOpen(false)}
+                        className="flex h-8 items-center gap-1 rounded-full bg-sunken px-2.5 text-xs font-medium text-ink-2 hover:bg-line hover:text-ink transition-colors"
+                        aria-label="Bring down panel"
+                        title="Bring down panel to see carousel"
+                      >
+                        <ChevronDown size={16} />
+                        <span className="text-[11px]">Hide</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sheet Content: scrollable inspector */}
+                  <div className="sb min-h-0 flex-1 overflow-y-auto px-1 pb-6">
+                    <div className="mx-auto max-w-2xl">
+                      {tab === "slide" && slide && (
+                        <SlideInspector key={slide.id} slide={slide} index={index} onEdit={editSlide} onPhoto={() => setPicker(true)} onRetry={() => retryPhotos([index])} searching={searching(slide) || imagesBusy} />
+                      )}
+                      {tab === "slide" && !slide && <p className="p-5 text-sm text-mute">Slides appear here as Pip writes them.</p>}
+                      {tab === "design" && <DesignInspector project={project} variant={variant} onEditVariant={editVariant} onEditCarousel={editCarousel} />}
+                      {tab === "caption" && <CaptionInspector variant={variant} onEditVariant={editVariant} />}
+                    </div>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
       )}
 
       <AnimatePresence>
