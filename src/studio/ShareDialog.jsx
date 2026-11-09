@@ -204,6 +204,32 @@ function LinkPanel({ project, flush, toast }) {
               <div className="text-[11px] text-mute">💻 Desktop</div>
             </div>
           </div>
+          {stats.screens && stats.screens.length > 0 && (
+            <div className="mt-3 border-t border-line/60 pt-2.5">
+              <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-mute">
+                <span>Screen Attention Heatmap</span>
+                <span>Avg Dwell</span>
+              </div>
+              <div className="space-y-1.5">
+                {stats.screens.map((sc, i) => {
+                  const maxViews = Math.max(...stats.screens.map((s) => s.views || 1), 1);
+                  const pct = Math.round(((sc.views || 0) / maxViews) * 100);
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="w-28 truncate font-medium text-ink">{sc.screen}</span>
+                      <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-line-soft">
+                        <div
+                          style={{ width: `${Math.max(8, pct)}%` }}
+                          className="h-full rounded-full bg-accent transition-all duration-500"
+                        />
+                      </div>
+                      <span className="w-14 text-right font-mono text-[11px] text-mute">{sc.avg_seconds || 0}s</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

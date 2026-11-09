@@ -77,16 +77,19 @@ export async function deviceShare(projectId) {
 
 export async function getShareStats(token) {
   const { data, error } = await supabase.rpc("get_share_stats", { p_token: token });
-  if (error) return { total: 0, mobile: 0, tablet: 0, desktop: 0, lastViewed: null };
-  return data || { total: 0, mobile: 0, tablet: 0, desktop: 0, lastViewed: null };
+  if (error) return { total: 0, mobile: 0, tablet: 0, desktop: 0, lastViewed: null, screens: [] };
+  return data || { total: 0, mobile: 0, tablet: 0, desktop: 0, lastViewed: null, screens: [] };
 }
 
-export async function recordShareView(token, device = "desktop", referrer = null) {
+export async function recordShareView(token, device = "desktop", referrer = null, screenId = null, screenName = null, dwellMs = 0) {
   try {
     await supabase.rpc("record_share_view", {
       p_token: token,
       p_device: device,
       p_referrer: referrer ? referrer.slice(0, 255) : null,
+      p_screen_id: screenId || null,
+      p_screen_name: screenName ? screenName.slice(0, 64) : null,
+      p_dwell_ms: dwellMs || 0,
     });
   } catch {}
 }

@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Braces, Copy, FileCode2, FileText, ImageIcon, Palette, Play, X } from "lucide-react";
+import { Braces, Code2, Copy, ExternalLink, FileCode2, FileText, ImageIcon, Palette, Play, X } from "lucide-react";
 import { strToU8, zipSync } from "fflate";
 import { Button } from "../ui";
 import { download } from "../util";
-import { htmlPrototype, reactProject, renderScreenPng, tokensFile } from "../design/exportDesign.js";
+import { exportDesignTokensJson, exportShadcnConfig, htmlPrototype, openInStackBlitz, reactProject, renderScreenPng, tokensFile } from "../design/exportDesign.js";
 import { designMd } from "../design/system.js";
 import { VIEWPORTS } from "../design/engine.js";
 
@@ -88,8 +88,22 @@ export function DesignExport({ project, screen, onClose, toast }) {
         </div>
         <div className="px-5">
           <Row icon={FileCode2} title="React + Tailwind project" desc="A Vite app with every screen as a component, tokens in Tailwind v4 and working navigation.">
+            <Button size="sm" variant="secondary" icon={ExternalLink} disabled={!!busy} onClick={() => run("sb", () => openInStackBlitz(project))}>
+              Open in StackBlitz
+            </Button>
             <Button size="sm" disabled={!!busy} onClick={() => run("react", () => download(zip(reactProject(project), name), `${name}-react.zip`))}>
               {busy === "react" ? "Packing…" : "Download .zip"}
+            </Button>
+          </Row>
+          <Row icon={Code2} title="Design tokens & shadcn" desc="Export tokens.json and shadcn/Tailwind configuration.">
+            <Button size="sm" variant="secondary" disabled={!!busy} onClick={() => run("tokens-json", () => download(new Blob([exportDesignTokensJson(project)], { type: "application/json" }), `${name}-tokens.json`))}>
+              tokens.json
+            </Button>
+            <Button size="sm" variant="secondary" disabled={!!busy} onClick={() => run("shadcn-cfg", () => {
+              const { tailwindConfig } = exportShadcnConfig(project);
+              download(new Blob([tailwindConfig], { type: "text/javascript" }), "tailwind.config.js");
+            })}>
+              tailwind.config.js
             </Button>
           </Row>
           <Row icon={Play} title="Clickable HTML prototype" desc="One page per screen plus an index, linked the way the prototype is.">

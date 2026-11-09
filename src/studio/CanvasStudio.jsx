@@ -9,8 +9,11 @@ import {
   LoaderCircle,
   Maximize,
   MessageSquarePlus,
+  Mic,
+  MicOff,
   Minus,
   MousePointer2,
+  Palette,
   Play,
   Plus,
   Redo2,
@@ -18,6 +21,8 @@ import {
   Share2,
   Smartphone,
   Undo2,
+  UploadCloud,
+  Workflow,
   X,
 } from "lucide-react";
 import { displayName, useSession } from "../session";
@@ -44,6 +49,13 @@ import { HistoryPanel } from "./panels/HistoryPanel";
 import { Present } from "./Present";
 import { Compare, Variations } from "./Variations";
 import { DesignExport } from "./DesignExport";
+import { extractScreenFlows } from "../design/flow.js";
+import { FlowOverlay } from "./FlowOverlay";
+import { usePresence } from "./usePresence";
+import { RemoteCursors } from "./RemoteCursors";
+import { reconstructScreenFromImage } from "../ai/vision.js";
+import { generateStyleguideScreen } from "../design/exportDesign.js";
+import { useSpeech } from "./useSpeech";
 
 const TABS = [
   ["design", "Design"],
@@ -74,6 +86,41 @@ export function CanvasStudio() {
   const [zoom, setZoom] = useState(0.5);
   const [sharing, setSharing] = useState(null);
   const { user, profile } = useSession();
+  const { peers, cursors, broadcastCursor } = usePresence(project.id, user, profile);
+  const [showFlows, setShowFlows] = useState(false);
+  const flows = useMemo(() => extractScreenFlows(project.screens), [project.screens]);
+  const speech = useSpeech((text) => setPrompt((prev) => (prev ? `${prev} ${text}` : text)));
+  const fileInputRef = useRef(null);
+  const [visionBusy, setVisionBusy] = useState(false);
+
+  const handleImportImage = async (file) => {
+    if (!file) return;
+    setVisionBusy(true);
+    try {
+      const reconstructed = await reconstructScreenFromImage(file, project);
+      api.edit(project.id, (p) => ({
+        ...p,
+        screens: [...p.screens, reconstructed],
+      }));
+      api.toast(`Imported “${reconstructed.name}” with Pip Vision`);
+      selectScreen(reconstructed.id);
+    } catch (err) {
+      api.toast(err.message || "Could not reconstruct screen", { tone: "error" });
+    } finally {
+      setVisionBusy(false);
+    }
+  };
+
+  const handleAddStyleguide = () => {
+    const styleguide = generateStyleguideScreen(project);
+    api.edit(project.id, (p) => ({
+      ...p,
+      screens: [...p.screens, styleguide],
+    }));
+    api.toast("Generated Design System styleguide screen");
+    selectScreen(styleguide.id);
+  };
+
   // Comments: a draft pinned to a just-clicked element, where each open
   // comment's element is now ({ [screenId]: { [commentId]: { x, y, path, lost } } }),
   // and the one being looked at.
@@ -481,6 +528,8 @@ export function CanvasStudio() {
         e.preventDefault();
         studio.commitScreen(selection.screenId, removeAt(selectedScreen.html, selection.info.path), "Deleted element");
         setSelection({ screenId: selection.screenId, info: null });
+      } else if (e.key.toLowerCase() === "f") {
+        setShowFlows((v) => !v);
       } else if (e.key === "1" && e.shiftKey) {
         fitAll();
       }
@@ -527,6 +576,23 @@ export function CanvasStudio() {
             </motion.span>
           )}
         </AnimatePresence>
+        {peers.length > 0 && (
+          <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pl-2 pr-2.5 text-xs font-medium">
+            <div className="flex -space-x-1.5">
+              {peers.slice(0, 3).map((p, idx) => (
+                <span
+                  key={p.userId || idx}
+                  title={`${p.name} (live)`}
+                  style={{ borderColor: p.color, backgroundColor: p.color }}
+                  className="flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border-2 text-[9px] font-bold uppercase text-white shadow-sm"
+                >
+                  {p.avatar ? <img src={p.avatar} alt="" className="h-full w-full object-cover" /> : p.name.charAt(0)}
+                </span>
+              ))}
+            </div>
+            <span className="text-[11px] font-medium text-ink-2">{peers.length} active</span>
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-1">
           <IconButton icon={Undo2} label="Undo" title="Undo (⌘Z)" onClick={() => api.undo(project.id)} disabled={!hist.past.length} iconSize={16} />
           <IconButton icon={Redo2} label="Redo" title="Redo (⇧⌘Z)" onClick={() => api.redo(project.id)} disabled={!hist.future.length} iconSize={16} />
@@ -596,6 +662,31 @@ export function CanvasStudio() {
           <button onClick={() => send("Add one more screen this app clearly needs, designed in the same system.")} disabled={working} className="mx-2 mt-2 flex items-center gap-2 rounded-xl border border-dashed border-line-strong px-3 py-2 text-sm text-mute transition-colors hover:border-ink hover:text-ink disabled:opacity-40">
             <Plus size={14} /> Suggest a screen
           </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImportImage(file);
+              e.target.value = "";
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={visionBusy || working}
+            className="mx-2 mt-2 flex items-center gap-2 rounded-xl border border-dashed border-line-strong px-3 py-2 text-sm text-mute transition-colors hover:border-ink hover:text-ink disabled:opacity-40"
+          >
+            {visionBusy ? <LoaderCircle size={14} className="animate-spin" /> : <UploadCloud size={14} />} Import mockup
+          </button>
+          <button
+            onClick={handleAddStyleguide}
+            disabled={working}
+            className="mx-2 mt-2 flex items-center gap-2 rounded-xl border border-dashed border-line-strong px-3 py-2 text-sm text-mute transition-colors hover:border-ink hover:text-ink disabled:opacity-40"
+          >
+            <Palette size={14} /> Styleguide screen
+          </button>
           {kit.length > 0 && (
             <div className="mt-auto border-t border-line p-4">
               <div className="eyebrow mb-2.5 flex items-center justify-between">
@@ -630,35 +721,50 @@ export function CanvasStudio() {
           )}
         </aside>
 
-        <main className="relative min-w-0 flex-1">
-          <Canvas ref={canvas} tool={tool} onBackgroundClick={() => setSelection(null)}>
-            {(view) =>
-              cssReady &&
-              placed.map((sc, i) => (
-                <div key={sc.id} data-frame-host={sc.id}>
-                  <ScreenCard
-                    ref={callbacksFor(sc.id).ref}
-                    project={project}
-                    screen={sc}
-                    deferred={i >= mounted && studio.streams[sc.id] == null}
-                    viewport={viewport}
-                    height={heights[sc.id]}
-                    zoom={view.z}
-                    selected={selection?.screenId === sc.id}
-                    mode={tool === "hand" ? "view" : tool === "comment" ? "comment" : "edit"}
-                    pins={pinsFor[sc.id]}
-                    onPin={onPin}
-                    streaming={studio.streams[sc.id] ?? null}
-                    busy={studio.busy[sc.id]}
-                    issues={(project.review?.audits?.[sc.id] || []).length}
-                    onSelect={stableSelect}
-                    onMessage={callbacksFor(sc.id).message}
-                    onAction={stableAction}
-                    onRename={setRenaming}
-                  />
-                </div>
-              ))
+        <main
+          className="relative min-w-0 flex-1 overflow-hidden"
+          onPointerMove={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const v = canvas.current?.view();
+            if (v) {
+              const cx = (e.clientX - rect.left - v.x) / v.z;
+              const cy = (e.clientY - rect.top - v.y) / v.z;
+              broadcastCursor(cx, cy, selection?.screenId || null);
             }
+          }}
+        >
+          <Canvas ref={canvas} tool={tool} onBackgroundClick={() => setSelection(null)}>
+            {(view) => (
+              <>
+                {cssReady &&
+                  placed.map((sc, i) => (
+                    <div key={sc.id} data-frame-host={sc.id}>
+                      <ScreenCard
+                        ref={callbacksFor(sc.id).ref}
+                        project={project}
+                        screen={sc}
+                        deferred={i >= mounted && studio.streams[sc.id] == null}
+                        viewport={viewport}
+                        height={heights[sc.id]}
+                        zoom={view.z}
+                        selected={selection?.screenId === sc.id}
+                        mode={tool === "hand" ? "view" : tool === "comment" ? "comment" : "edit"}
+                        pins={pinsFor[sc.id]}
+                        onPin={onPin}
+                        streaming={studio.streams[sc.id] ?? null}
+                        busy={studio.busy[sc.id]}
+                        issues={(project.review?.audits?.[sc.id] || []).length}
+                        onSelect={stableSelect}
+                        onMessage={callbacksFor(sc.id).message}
+                        onAction={stableAction}
+                        onRename={setRenaming}
+                      />
+                    </div>
+                  ))}
+                {showFlows && <FlowOverlay flows={flows} placed={placed} onSelectScreen={selectScreen} />}
+                <RemoteCursors cursors={cursors} />
+              </>
+            )}
           </Canvas>
 
           <div className="absolute left-4 top-4 flex items-center gap-0.5 rounded-full border border-line bg-surface/90 p-1 shadow-soft backdrop-blur">
@@ -671,6 +777,14 @@ export function CanvasStudio() {
                 <Icon size={15} />
               </button>
             ))}
+            <button
+              onClick={() => setShowFlows((v) => !v)}
+              aria-label="Toggle screen flows (F)"
+              title={`Screen Flows (${flows.length} links)`}
+              className={cx("flex h-8 w-8 items-center justify-center rounded-full transition-colors", showFlows ? "bg-accent text-white" : "text-ink-2 hover:bg-sunken")}
+            >
+              <Workflow size={15} />
+            </button>
             <span className="mx-1 h-5 w-px bg-line" />
             <button onClick={() => canvas.current?.zoomBy(1 / 1.25)} aria-label="Zoom out" className="flex h-8 w-8 items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-sunken">
               <Minus size={15} />
@@ -727,10 +841,34 @@ export function CanvasStudio() {
                   rows={1}
                   maxLength={1200}
                   disabled={working}
-                  placeholder={working ? "Pip is on it…" : focusLabel && !wholeApp ? `Ask Pip to change ${focusLabel}…` : "Ask Pip for any change across the app…"}
+                  placeholder={
+                    speech.listening
+                      ? "Listening to your voice… speak to Pip"
+                      : working
+                      ? "Pip is on it…"
+                      : focusLabel && !wholeApp
+                      ? `Ask Pip to change ${focusLabel}…`
+                      : "Ask Pip for any change across the app…"
+                  }
                   aria-label="Ask Pip"
                   className="max-h-32 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm outline-none placeholder:text-faint"
                 />
+                {speech.supported && (
+                  <button
+                    type="button"
+                    onClick={speech.toggle}
+                    aria-label={speech.listening ? "Stop voice input" : "Voice prompt Pip"}
+                    title={speech.listening ? "Listening... click to stop" : "Speak to Pip"}
+                    className={cx(
+                      "mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all",
+                      speech.listening
+                        ? "animate-pulse bg-accent text-white shadow-md ring-4 ring-accent/25"
+                        : "text-mute hover:bg-sunken hover:text-ink"
+                    )}
+                  >
+                    <Mic size={15} />
+                  </button>
+                )}
                 <button type="submit" disabled={working || !prompt.trim()} aria-label="Send" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-white transition-[background-color,transform,opacity] hover:bg-ink-2 active:scale-95 disabled:opacity-25">
                   {working ? <LoaderCircle size={16} className="animate-spin" /> : <ArrowUp size={17} strokeWidth={2.4} />}
                 </button>

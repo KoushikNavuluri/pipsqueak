@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowUpLeft, Copy, MousePointerClick, RotateCcw, Shuffle, Sparkles, Trash2, Wand } from "lucide-react";
+import { ArrowUpLeft, Copy, MousePointerClick, RotateCcw, Shuffle, Sparkles, Trash2, Wand, Workflow } from "lucide-react";
 import { Button, Segmented, cx } from "../../ui";
 import { PATTERNS } from "../../design/patterns.js";
 import { duplicateAt, removeAt, updateAt } from "../../design/htmlTools.js";
@@ -319,6 +319,62 @@ export function Inspector({ project, studio, selection, onSelectPath, onAction, 
               {label}
             </button>
           ))}
+        </div>
+      </Section>
+
+      <Section title="Prototype & Flow">
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center justify-between text-xs text-mute">
+            <span>On tap navigate to</span>
+            {info.nav && (
+              <span className="flex items-center gap-1 text-[11px] font-semibold text-accent">
+                <Workflow size={11} /> Linked
+              </span>
+            )}
+          </label>
+          <select
+            value={info.nav || ""}
+            onChange={(e) => {
+              const target = e.target.value;
+              patch((el) => {
+                if (target) {
+                  el.setAttribute("data-nav", target);
+                } else {
+                  el.removeAttribute("data-nav");
+                  el.removeAttribute("data-transition");
+                }
+              }, { nav: target });
+            }}
+            aria-label="Navigate on tap"
+            className="h-8 rounded-lg border border-line bg-white px-2 text-xs font-medium text-ink outline-none focus:border-ink"
+          >
+            <option value="">None (Standard element)</option>
+            {project.screens.filter((s) => s.id !== screen.id).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {info.nav && (
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <span className="text-xs text-mute">Transition</span>
+              <Segmented
+                id={"trans-" + screen.id}
+                size="sm"
+                value={info.transition || "slide"}
+                onChange={(t) => {
+                  patch((el) => {
+                    el.setAttribute("data-transition", t);
+                  }, { transition: t });
+                }}
+                options={[
+                  { value: "slide", label: "Slide" },
+                  { value: "push", label: "Push" },
+                  { value: "fade", label: "Fade" },
+                ]}
+              />
+            </div>
+          )}
         </div>
       </Section>
 

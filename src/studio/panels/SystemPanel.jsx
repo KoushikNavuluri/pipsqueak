@@ -57,6 +57,12 @@ export function SystemPanel({ project, onChange, onAsk }) {
           <div className="text-[11px] font-semibold uppercase tracking-wider text-mute">{skill.name}</div>
           <div className="mt-0.5 text-base font-semibold">{sys.name}</div>
           <p className="mt-1 text-xs leading-relaxed text-mute">{sys.pitch}</p>
+          <button
+            onClick={() => onAsk?.("Generate a dedicated Design System styleguide screen showing typography, color swatches, button states, and components.")}
+            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-line bg-paper py-1.5 text-xs font-semibold text-ink hover:border-ink"
+          >
+            <Palette size={13} /> Add Styleguide Screen
+          </button>
         </div>
         <form
           className="mt-3 flex gap-2"

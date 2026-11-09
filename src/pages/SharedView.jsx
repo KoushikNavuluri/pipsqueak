@@ -123,6 +123,34 @@ export function SharedView() {
 
   const screenName = (id) => shared?.project?.screens?.find((s) => s.id === id)?.name;
 
+  const lastScreenRef = useRef({ id: null, start: Date.now() });
+  useEffect(() => {
+    if (!screenId || !shared?.project) return;
+    const now = Date.now();
+    const prev = lastScreenRef.current;
+    if (prev.id && prev.id !== screenId) {
+      const dwell = now - prev.start;
+      const prevScreen = shared.project.screens.find((s) => s.id === prev.id);
+      const dev = phone ? "mobile" : window.innerWidth < 1024 ? "tablet" : "desktop";
+      recordShareView(token, dev, document.referrer, prev.id, prevScreen?.name || prev.id, dwell);
+    }
+    lastScreenRef.current = { id: screenId, start: now };
+  }, [screenId, token, phone, shared?.project]);
+
+  useEffect(() => {
+    const flush = () => {
+      const prev = lastScreenRef.current;
+      if (prev.id && shared?.project) {
+        const dwell = Date.now() - prev.start;
+        const prevScreen = shared.project.screens.find((s) => s.id === prev.id);
+        const dev = phone ? "mobile" : window.innerWidth < 1024 ? "tablet" : "desktop";
+        recordShareView(token, dev, document.referrer, prev.id, prevScreen?.name || prev.id, dwell);
+      }
+    };
+    window.addEventListener("beforeunload", flush);
+    return () => window.removeEventListener("beforeunload", flush);
+  }, [token, phone, shared?.project]);
+
   const unlockWithPasscode = async (e) => {
     e.preventDefault();
     if (!passcodeDraft.trim() || passcodeBusy) return;

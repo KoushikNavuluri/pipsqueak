@@ -265,3 +265,252 @@ export async function renderScreenPng(screen, system, kit, width = 390, height =
   }
 }
 
+export function exportDesignTokensJson(project) {
+  const sys = project?.system || {};
+  const colors = sys.colors || {};
+  const fonts = sys.fonts || {};
+  return JSON.stringify(
+    {
+      name: project?.name || "Design System",
+      version: "1.0.0",
+      theme: {
+        colors: {
+          bg: colors.bg || "#FAFAF8",
+          primary: colors.primary || "#16161A",
+          accent: colors.accent || "#FF4D1A",
+          ink: colors.ink || "#16161A",
+          surface: colors.surface || "#FFFFFF",
+          mute: colors.mute || "#8A8A93",
+          line: colors.line || "#E5E5E2",
+          danger: colors.danger || "#EF4444",
+        },
+        typography: {
+          display: fonts.display || "Fraunces",
+          body: fonts.body || "Geist",
+          mono: fonts.mono || "Geist Mono",
+        },
+        radii: {
+          sm: "0.375rem",
+          md: "0.5rem",
+          lg: "0.75rem",
+          xl: "1rem",
+          full: "9999px",
+        },
+        shadcn: {
+          cssVars: {
+            "--background": colors.bg || "#FAFAF8",
+            "--foreground": colors.ink || "#16161A",
+            "--card": colors.surface || "#FFFFFF",
+            "--card-foreground": colors.ink || "#16161A",
+            "--primary": colors.primary || "#16161A",
+            "--primary-foreground": "#FFFFFF",
+            "--accent": colors.accent || "#FF4D1A",
+            "--accent-foreground": "#FFFFFF",
+            "--muted": colors.line || "#E5E5E2",
+            "--muted-foreground": colors.mute || "#8A8A93",
+            "--border": colors.line || "#E5E5E2",
+            "--radius": "0.75rem",
+          },
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+export function exportShadcnConfig(project) {
+  const sys = project?.system || {};
+  const colors = sys.colors || {};
+  const fonts = sys.fonts || {};
+
+  const tailwindConfig = `/** @type {import('tailwindcss').Config} */
+module.exports = {
+  darkMode: ["class"],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  theme: {
+    extend: {
+      colors: {
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        border: "hsl(var(--border))",
+      },
+      fontFamily: {
+        display: ["${fonts.display || "Fraunces"}", "serif"],
+        body: ["${fonts.body || "Geist"}", "sans-serif"],
+        mono: ["${fonts.mono || "Geist Mono"}", "monospace"],
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+    },
+  },
+  plugins: [],
+};
+`;
+
+  const globalsCss = `@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --accent: 14 100% 55%;
+    --accent-foreground: 0 0% 98%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --border: 240 5.9% 90%;
+    --radius: 0.75rem;
+  }
+}
+`;
+
+  return { tailwindConfig, globalsCss };
+}
+
+export function openInStackBlitz(project) {
+  if (typeof document === "undefined") return;
+  const files = reactProject(project);
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "https://stackblitz.com/run";
+  form.target = "_blank";
+
+  const add = (name, val) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = typeof val === "string" ? val : JSON.stringify(val);
+    form.appendChild(input);
+  };
+
+  add("project[title]", project.name || "Pipsqueak Design");
+  add("project[description]", project.tagline || "Exported from Pipsqueak");
+  add("project[template]", "node");
+
+  for (const [path, content] of Object.entries(files)) {
+    add(`project[files][${path}]`, content);
+  }
+
+  document.body.appendChild(form);
+  form.submit();
+  form.remove();
+}
+
+export function generateStyleguideScreen(project) {
+  const sys = project?.system || {};
+  const sysName = sys.name || "Design System";
+  const html = `<div class="min-h-full w-full bg-paper text-ink p-8 flex flex-col gap-8">
+  <header class="border-b border-line pb-6">
+    <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-accent">
+      <span class="h-2 w-2 rounded-full bg-accent"></span>
+      Design System Specimen
+    </div>
+    <h1 class="font-display text-3xl font-bold tracking-tight text-ink mt-2">${sysName} Styleguide</h1>
+    <p class="text-sm text-mute mt-1">Foundational tokens, typography scale, color palette, and core components.</p>
+  </header>
+
+  <section>
+    <div class="text-xs font-semibold uppercase tracking-wider text-mute mb-3">01 · Color Palette</div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="rounded-xl border border-line bg-surface p-3">
+        <div class="h-12 w-full rounded-lg bg-primary mb-2 shadow-inner"></div>
+        <div class="text-xs font-bold text-ink">Primary</div>
+        <div class="text-[11px] font-mono text-mute">bg-primary</div>
+      </div>
+      <div class="rounded-xl border border-line bg-surface p-3">
+        <div class="h-12 w-full rounded-lg bg-accent mb-2 shadow-inner"></div>
+        <div class="text-xs font-bold text-ink">Accent</div>
+        <div class="text-[11px] font-mono text-mute">bg-accent</div>
+      </div>
+      <div class="rounded-xl border border-line bg-surface p-3">
+        <div class="h-12 w-full rounded-lg bg-surface border border-line mb-2 shadow-inner"></div>
+        <div class="text-xs font-bold text-ink">Surface</div>
+        <div class="text-[11px] font-mono text-mute">bg-surface</div>
+      </div>
+      <div class="rounded-xl border border-line bg-surface p-3">
+        <div class="h-12 w-full rounded-lg bg-paper border border-line mb-2 shadow-inner"></div>
+        <div class="text-xs font-bold text-ink">Paper / Canvas</div>
+        <div class="text-[11px] font-mono text-mute">bg-paper</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="text-xs font-semibold uppercase tracking-wider text-mute mb-3">02 · Typography Scale</div>
+    <div class="rounded-2xl border border-line bg-surface p-6 flex flex-col gap-4">
+      <div class="flex items-baseline justify-between border-b border-line pb-3">
+        <span class="text-xs font-mono text-mute">font-display 32px</span>
+        <span class="font-display text-2xl font-bold text-ink">Hero Display Heading</span>
+      </div>
+      <div class="flex items-baseline justify-between border-b border-line pb-3">
+        <span class="text-xs font-mono text-mute">font-display 20px</span>
+        <span class="font-display text-lg font-semibold text-ink">Section & Modal Title</span>
+      </div>
+      <div class="flex items-baseline justify-between border-b border-line pb-3">
+        <span class="text-xs font-mono text-mute">font-body 15px</span>
+        <span class="text-sm leading-relaxed text-ink-2 max-w-md">Body copy designed for high legibility, clean rhythm, and effortless reading.</span>
+      </div>
+      <div class="flex items-baseline justify-between">
+        <span class="text-xs font-mono text-mute">font-mono 12px</span>
+        <span class="font-mono text-xs text-mute tracking-tight">TOKEN_ID: #4A90E2 · SYSTEM_READY</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="text-xs font-semibold uppercase tracking-wider text-mute mb-3">03 · UI Components & States</div>
+    <div class="rounded-2xl border border-line bg-surface p-6 flex flex-col gap-6">
+      <div>
+        <div class="text-xs text-mute font-medium mb-2.5">Buttons</div>
+        <div class="flex flex-wrap items-center gap-3">
+          <button class="h-10 px-5 rounded-full bg-ink text-white font-semibold text-xs shadow-sm hover:bg-ink-2">Primary Button</button>
+          <button class="h-10 px-5 rounded-full bg-accent text-white font-semibold text-xs shadow-sm hover:opacity-90">Accent Button</button>
+          <button class="h-10 px-4 rounded-full border border-line bg-surface text-ink font-medium text-xs hover:border-ink">Secondary</button>
+          <button class="h-10 px-3 text-mute font-medium text-xs hover:text-ink">Ghost Action</button>
+        </div>
+      </div>
+      <div>
+        <div class="text-xs text-mute font-medium mb-2.5">Badges & Tags</div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="inline-flex items-center gap-1 rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-deep">
+            <span class="h-1.5 w-1.5 rounded-full bg-accent"></span> Featured
+          </span>
+          <span class="rounded-full bg-sunken px-3 py-1 text-xs font-medium text-ink-2">Neutral Tag</span>
+          <span class="rounded-full border border-line px-3 py-1 text-xs font-medium text-mute">Outlined</span>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>`.trim();
+
+  return {
+    id: `styleguide-${Date.now().toString(36).slice(-4)}`,
+    name: "Design System",
+    type: "styleguide",
+    purpose: "Visual design tokens, typography specimen, and component states.",
+    html,
+  };
+}
+
+

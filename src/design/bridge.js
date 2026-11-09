@@ -134,11 +134,14 @@ function bridgeMain() {
   function describe(el) {
     var r = el.getBoundingClientRect();
     var cs = getComputedStyle(el);
+    var navEl = el.closest("[data-nav]");
     return {
       path: pathOf(el),
       tag: el.tagName.toLowerCase(),
       text: (el.innerText || "").trim().slice(0, 240),
       className: el.getAttribute("class") || "",
+      nav: el.getAttribute("data-nav") || (navEl ? navEl.getAttribute("data-nav") : null),
+      transition: el.getAttribute("data-transition") || (navEl ? navEl.getAttribute("data-transition") : null),
       rect: { x: r.left, y: r.top, w: r.width, h: r.height },
       doc: docRect(el),
       outer: el.outerHTML.slice(0, 8000),
