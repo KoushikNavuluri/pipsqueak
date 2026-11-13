@@ -640,6 +640,43 @@ export async function pinCandidate(admin: any, userId: string, folder: string, c
 
 // Strips a web page to readable text for "make a carousel from this article".
 export async function readPage(url: string) {
+  const ghMatch = /^https?:\/\/(?:www\.)?github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)(?:\/.*)?$/i.exec(url.trim());
+  if (ghMatch) {
+    const [, owner, repoRaw] = ghMatch;
+    const repo = repoRaw.replace(/\.git$/i, "");
+    try {
+      const apiRes = await safeFetch(`https://api.github.com/repos/${owner}/${repo}`, {
+        timeoutMs: 8000,
+        headers: { "User-Agent": BROWSER_UA, Accept: "application/vnd.github.v3+json" },
+      });
+      const repoInfo = apiRes.ok ? await apiRes.json() : null;
+      const rawRes = await safeFetch(`https://raw.githubusercontent.com/${owner}/${repo}/HEAD/README.md`, {
+        timeoutMs: 8000,
+        headers: { "User-Agent": BROWSER_UA },
+      });
+      const readme = rawRes.ok ? new TextDecoder().decode(await readCapped(rawRes, 500_000)) : "";
+
+      const parts = [
+        `GitHub Repository: ${owner}/${repo}`,
+        repoInfo?.description ? `Description: ${repoInfo.description}` : "",
+        repoInfo?.stargazers_count ? `Stars: ${Number(repoInfo.stargazers_count).toLocaleString()}★` : "",
+        repoInfo?.language ? `Language: ${repoInfo.language}` : "",
+        repoInfo?.topics?.length ? `Topics: ${repoInfo.topics.join(", ")}` : "",
+        readme ? `README Overview:\n${readme.slice(0, 8000)}` : "",
+      ].filter(Boolean);
+
+      const fullText = parts.join("\n\n");
+      if (fullText.length > 100) {
+        return {
+          title: `${owner}/${repo}${repoInfo?.stargazers_count ? ` (${Number(repoInfo.stargazers_count).toLocaleString()}★)` : ""}: ${repoInfo?.description || "Architecture & Breakdown"}`,
+          text: fullText.slice(0, 12000),
+        };
+      }
+    } catch {
+      // Fallback to standard web scraping
+    }
+  }
+
   const res = await safeFetch(url, { timeoutMs: 9000, headers: { "User-Agent": BROWSER_UA, Accept: "text/html,text/plain" } });
   if (!res.ok) throw new HttpError(422, `That page answered ${res.status}. Paste its text instead.`);
   const type = res.headers.get("content-type") || "";

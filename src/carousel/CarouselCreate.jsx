@@ -8,10 +8,12 @@ import { Button, EASE, IconButton, Segmented, Switch, cx, fireBurst } from "../u
 import { inputClass } from "../pages/forms";
 import { FORMATS, STYLES, STYLE_IDS } from "./styles";
 import { ScaledSlide } from "./Slide";
-import { newCarouselProject } from "./model";
+import { formatGitHubRepoNotes, isGitHubRepoUrl, loadBrandKit, newCarouselProject, parseGitHubRepo } from "./model";
 import { buildVariant, planCarousel, readSource } from "./engine";
 
 const IDEAS = [
+  "⚡ GitHub Teardown: https://github.com/facebook/react",
+  "⚡ GitHub Teardown: https://github.com/torvalds/linux",
   "7 money habits that quietly make people in their 20s rich",
   "Why Kyoto's tiny coffee bars feel so calm",
   "The 5-minute morning routine that fixed my focus",
@@ -43,11 +45,43 @@ const IMAGE_LABEL = { photo_led: "Photo-led", photo_accents: "Photo accents", ty
 const BRAND_KEY = "pq.carousel.brand";
 const loadBrand = () => {
   try {
+    const kit = loadBrandKit();
+    if (kit?.brand?.handle || kit?.brand?.name) return kit.brand;
     return JSON.parse(localStorage.getItem(BRAND_KEY) || "{}");
   } catch {
     return {};
   }
 };
+
+async function fetchGitHubRepoClient(owner, repo) {
+  try {
+    const apiRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+    const data = apiRes.ok ? await apiRes.json() : null;
+    let readme = "";
+    try {
+      const rawRes = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/HEAD/README.md`);
+      if (rawRes.ok) readme = await rawRes.text();
+    } catch {}
+
+    const stars = data?.stargazers_count || 0;
+    const desc = data?.description || "";
+    const lang = data?.language || "";
+    const topics = data?.topics || [];
+    const readmeSample = readme.split("\n").filter((l) => l.trim().length > 30).slice(0, 8).join("\n");
+
+    return {
+      owner,
+      repo,
+      description: desc,
+      stars,
+      language: lang,
+      topics,
+      readmeSample,
+    };
+  } catch {
+    return { owner, repo, description: "", stars: 0, language: "", topics: [], readmeSample: "" };
+  }
+}
 
 function Field({ label, hint, children }) {
   return (
@@ -108,6 +142,26 @@ export function CarouselCreate({ onClose, initialTopic = "" }) {
   const [error, setError] = useState("");
   const abort = useRef(null);
   const box = useRef(null);
+
+  const repoParsed = useMemo(() => parseGitHubRepo(topic) || parseGitHubRepo(sourceUrl), [topic, sourceUrl]);
+  const [ghLoading, setGhLoading] = useState(false);
+
+  const applyGitHubRepo = async (owner, repo) => {
+    setGhLoading(true);
+    try {
+      const data = await fetchGitHubRepoClient(owner, repo);
+      setTopic(`Deep dive: How ${repo} works under the hood`);
+      setSourceMode("link");
+      setSourceUrl(`https://github.com/${owner}/${repo}`);
+      setSourceTitle(`${owner}/${repo}${data.stars ? ` (${data.stars.toLocaleString()}★)` : ""}`);
+      setNotes(formatGitHubRepoNotes(data));
+      api.toast(`Loaded repository info for ${owner}/${repo}!`, { tone: "success" });
+    } catch (err) {
+      api.toast("Couldn't fetch GitHub repo: " + err.message, { tone: "error" });
+    } finally {
+      setGhLoading(false);
+    }
+  };
 
   useEffect(() => () => abort.current?.abort(), []);
   useEffect(() => {
@@ -230,9 +284,38 @@ export function CarouselCreate({ onClose, initialTopic = "" }) {
                     placeholder="A topic, an idea or a hot take, e.g. “7 money habits that quietly make people in their 20s rich”"
                     className="block w-full resize-none rounded-2xl border border-line bg-wash px-4 py-3.5 text-[17px] leading-relaxed outline-none transition-colors placeholder:text-faint focus:border-ink/60"
                   />
+                  {repoParsed && (
+                    <div className="mt-3 flex items-center justify-between rounded-xl border border-teal-500/30 bg-teal-500/10 px-3.5 py-2 text-xs">
+                      <span className="flex items-center gap-2 font-medium text-teal-800 dark:text-teal-200">
+                        <Sparkles size={14} className="text-teal-600" />
+                        GitHub Repo: <strong className="font-mono">{repoParsed.owner}/{repoParsed.repo}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={ghLoading}
+                        onClick={() => applyGitHubRepo(repoParsed.owner, repoParsed.repo)}
+                        className="rounded-lg bg-teal-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+                      >
+                        {ghLoading ? "Fetching..." : "Autofill Repo Teardown"}
+                      </button>
+                    </div>
+                  )}
                   <div className="nosb mt-2.5 flex gap-2 overflow-x-auto">
                     {IDEAS.map((idea) => (
-                      <button key={idea} onClick={() => setTopic(idea)} className="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-ink-2 transition-colors hover:border-line-strong hover:text-ink">
+                      <button
+                        key={idea}
+                        onClick={() => {
+                          if (idea.includes("github.com")) {
+                            const parsed = parseGitHubRepo(idea);
+                            if (parsed) {
+                              applyGitHubRepo(parsed.owner, parsed.repo);
+                              return;
+                            }
+                          }
+                          setTopic(idea);
+                        }}
+                        className="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-ink-2 transition-colors hover:border-line-strong hover:text-ink"
+                      >
                         {idea}
                       </button>
                     ))}

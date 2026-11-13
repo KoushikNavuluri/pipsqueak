@@ -23,6 +23,8 @@ export const LAYOUTS = [
   { id: "statement", label: "Statement" },
   { id: "photo", label: "Photo" },
   { id: "split", label: "Photo + text" },
+  { id: "panorama", label: "Panorama spread" },
+  { id: "code", label: "Code / Terminal" },
   { id: "list", label: "List" },
   { id: "step", label: "Step" },
   { id: "stat", label: "Big number" },
@@ -32,7 +34,7 @@ export const LAYOUTS = [
   { id: "cta", label: "Call to action" },
 ];
 
-export const PHOTO_LAYOUTS = new Set(["photo", "split"]);
+export const PHOTO_LAYOUTS = new Set(["photo", "split", "panorama"]);
 export const ITEM_LAYOUTS = new Set(["list", "step", "compare", "checklist"]);
 export const MAX_SLIDES = 20;
 
@@ -40,7 +42,7 @@ export const emptySlide = (layout = "statement") => ({
   id: uid(),
   layout,
   kicker: "",
-  title: layout === "cta" ? "Save this for later" : "New slide",
+  title: layout === "cta" ? "Save this for later" : layout === "code" ? "Under the hood" : layout === "panorama" ? "The full picture" : "New slide",
   highlight: "",
   body: "",
   items: layout === "compare" ? [{ label: "Before", text: "" }, { label: "After", text: "" }] : [],
@@ -48,6 +50,9 @@ export const emptySlide = (layout = "statement") => ({
   quote: { text: "", by: "" },
   source: "",
   image: { use: PHOTO_LAYOUTS.has(layout), kind: "photo", query: "", altQuery: "", subject: "", ...(PHOTO_LAYOUTS.has(layout) ? { status: "empty" } : {}) },
+  panorama: layout === "panorama" ? { part: 1, totalParts: 2 } : null,
+  peekNext: false,
+  code: layout === "code" ? { language: "typescript", code: "// Core architecture breakdown\nexport function solve() {\n  return { ok: true };\n}", filename: "index.ts", lineHighlight: "2" } : null,
   alt: "",
   img: null,
 });
@@ -62,6 +67,11 @@ export function normalizeSlide(s) {
     stat: { ...base.stat, ...(s?.stat || {}) },
     quote: { ...base.quote, ...(s?.quote || {}) },
     image: { ...base.image, ...(s?.image || {}) },
+    panorama: s?.panorama ? { part: s.panorama.part || 1, totalParts: s.panorama.totalParts || 2 } : (s?.layout === "panorama" ? { part: 1, totalParts: 2 } : null),
+    peekNext: !!s?.peekNext,
+    code: s?.code
+      ? { language: s.code.language || "typescript", code: s.code.code ?? "", filename: s.code.filename || "index.ts", lineHighlight: s.code.lineHighlight || "" }
+      : (s?.layout === "code" ? { language: "typescript", code: "// Core architecture breakdown\nexport function solve() {\n  return { ok: true };\n}", filename: "index.ts", lineHighlight: "2" } : null),
     img: s?.img || null,
   };
 }
@@ -216,3 +226,49 @@ export function summaryOf(project) {
 
 // The payload the engine needs for any slide-level request.
 export const slidesForApi = (slides) => slides.map(({ id, img, ...s }) => s);
+
+// GitHub repo parser and helpers
+export const GITHUB_REPO_REGEX = /^https?:\/\/(?:www\.)?github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)(?:\/.*)?$/i;
+
+export function isGitHubRepoUrl(url) {
+  return GITHUB_REPO_REGEX.test(String(url || "").trim());
+}
+
+export function parseGitHubRepo(url) {
+  const m = GITHUB_REPO_REGEX.exec(String(url || "").trim());
+  if (!m) return null;
+  return { owner: m[1], repo: m[2].replace(/\.git$/i, "") };
+}
+
+export function formatGitHubRepoNotes(repo) {
+  const parts = [
+    `GitHub Repository: ${repo.owner}/${repo.repo}`,
+    repo.description ? `Description: ${repo.description}` : "",
+    repo.stars ? `Stars: ${Number(repo.stars).toLocaleString()}★` : "",
+    repo.language ? `Primary Language: ${repo.language}` : "",
+    repo.topics?.length ? `Topics: ${repo.topics.join(", ")}` : "",
+    repo.readmeSample ? `README Breakdown:\n${repo.readmeSample}` : "",
+  ].filter(Boolean);
+  return parts.join("\n\n");
+}
+
+// Brand Kit storage helpers
+export const BRAND_KIT_KEY = "pq.carousel.brand_kit";
+
+export function loadBrandKit() {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(BRAND_KIT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveBrandKit(kit) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(BRAND_KIT_KEY, JSON.stringify(kit));
+  } catch {}
+}
+

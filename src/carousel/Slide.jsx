@@ -1085,6 +1085,269 @@ function PhotoLayout({ s, ctx, split }) {
   );
 }
 
+function PanoramaLayout({ s, ctx }) {
+  const { st, pal, W, H, img, treatment, searching } = ctx;
+  const part = s.panorama?.part === 2 ? 2 : 1;
+  const isRight = part === 2;
+
+  return (
+    <>
+      <div style={{ position: "absolute", left: isRight ? -W : 0, top: 0, width: W * 2, height: H, overflow: "hidden" }}>
+        <Img img={img} treatment={treatment} pal={pal} searching={searching} />
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: isDark(pal.bg)
+            ? "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.38) 50%, rgba(0,0,0,0.65) 100%)"
+            : "linear-gradient(to top, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.48) 50%, rgba(255,255,255,0.7) 100%)",
+          pointerEvents: "none",
+        }}
+      />
+      {!isRight ? (
+        <div
+          style={{
+            position: "absolute",
+            right: 28,
+            bottom: 110,
+            zIndex: 6,
+            background: pal.accent,
+            color: pal.onAccent,
+            fontFamily: st.label,
+            fontSize: 18,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            padding: "8px 18px",
+            borderRadius: 999,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.22)",
+          }}
+        >
+          <span>Spread continues</span>
+          <span style={{ fontSize: 22 }}>➔</span>
+        </div>
+      ) : (
+        <div
+          style={{
+            position: "absolute",
+            left: 28,
+            bottom: 110,
+            zIndex: 6,
+            background: "rgba(0,0,0,0.65)",
+            backdropFilter: "blur(8px)",
+            color: "#ffffff",
+            fontFamily: st.label,
+            fontSize: 16,
+            fontWeight: 600,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            padding: "6px 14px",
+            borderRadius: 999,
+          }}
+        >
+          <span>Part 2 of spread</span>
+        </div>
+      )}
+      <Region ctx={ctx} panel={false} align="end" top={180} bottom={180}>
+        <TextBlock s={s} ctx={ctx} max={116} min={58} area={904 * 280} bodySize={34} />
+      </Region>
+    </>
+  );
+}
+
+function highlightCode(rawCode) {
+  const lines = String(rawCode || "").split("\n");
+  const KEYWORDS = new Set([
+    "const", "let", "var", "function", "return", "if", "else", "for", "while",
+    "import", "export", "from", "default", "class", "async", "await", "try",
+    "catch", "finally", "throw", "new", "typeof", "interface", "type", "def",
+    "print", "curl", "npm", "git", "run", "docker", "cd", "sudo", "echo"
+  ]);
+
+  return lines.map((line) => {
+    if (/^\s*(\/\/|#|--)/.test(line)) {
+      return [{ type: "comment", text: line }];
+    }
+    const tokens = [];
+    const regex = /("[^"]*"|'[^']*'|`[^`]*`|\b[a-zA-Z_$][a-zA-Z0-9_$]*\b|[0-9]+|[^\s\w])/g;
+    let lastIndex = 0;
+    let match;
+    while ((match = regex.exec(line)) !== null) {
+      if (match.index > lastIndex) {
+        tokens.push({ type: "plain", text: line.slice(lastIndex, match.index) });
+      }
+      const val = match[0];
+      if (/^["'`]/.test(val)) {
+        tokens.push({ type: "string", text: val });
+      } else if (KEYWORDS.has(val)) {
+        tokens.push({ type: "keyword", text: val });
+      } else if (/^[0-9]+$/.test(val)) {
+        tokens.push({ type: "number", text: val });
+      } else {
+        tokens.push({ type: "ident", text: val });
+      }
+      lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < line.length) {
+      tokens.push({ type: "plain", text: line.slice(lastIndex) });
+    }
+    return tokens.length ? tokens : [{ type: "plain", text: line }];
+  });
+}
+
+function CodeSlide({ s, ctx }) {
+  const { st, pal } = ctx;
+  const filename = s.code?.filename || (s.code?.language === "bash" ? "terminal.sh" : "architecture.ts");
+  const lang = (s.code?.language || "ts").toUpperCase();
+  const rawCode = s.code?.code || "// Core architecture\nexport function solve() {\n  return { ok: true };\n}";
+  const parsedLines = highlightCode(rawCode);
+  const highlighted = new Set(String(s.code?.lineHighlight || "").split(",").map((x) => x.trim()));
+
+  return (
+    <Region ctx={ctx} panel={false} align="start" top={150} bottom={110}>
+      <TextBlock s={s} ctx={ctx} max={100} min={54} area={904 * 180} bodySize={32} />
+      <div
+        style={{
+          marginTop: fs(34),
+          borderRadius: 20,
+          background: "#0d1117",
+          border: "2px solid rgba(255,255,255,0.14)",
+          boxShadow: "0 24px 64px -12px rgba(0,0,0,0.6)",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          textAlign: "left",
+        }}
+      >
+        <div
+          style={{
+            height: 48,
+            background: "#161b22",
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
+            padding: "0 18px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 13, height: 13, borderRadius: "50%", background: "#ff5f56" }} />
+            <span style={{ width: 13, height: 13, borderRadius: "50%", background: "#ffbd2e" }} />
+            <span style={{ width: 13, height: 13, borderRadius: "50%", background: "#27c93f" }} />
+          </div>
+          <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 16, color: "rgba(255,255,255,0.72)", letterSpacing: "0.02em" }}>
+            {filename}
+          </div>
+          <div
+            style={{
+              fontFamily: st.label,
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              color: pal.accent,
+              background: "rgba(255,255,255,0.06)",
+              padding: "3px 8px",
+              borderRadius: 6,
+            }}
+          >
+            {lang}
+          </div>
+        </div>
+        <div
+          style={{
+            padding: "18px 22px",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            fontSize: fs(24),
+            lineHeight: 1.6,
+            color: "#e6edf3",
+            whiteSpace: "pre",
+            overflow: "hidden",
+          }}
+        >
+          {parsedLines.map((tokens, idx) => {
+            const lineNo = idx + 1;
+            const isLineHighlighted = highlighted.has(String(lineNo));
+            return (
+              <div
+                key={idx}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  background: isLineHighlighted ? "rgba(56, 139, 253, 0.18)" : "transparent",
+                  borderLeft: isLineHighlighted ? `3px solid ${pal.accent}` : "3px solid transparent",
+                  marginLeft: -10,
+                  paddingLeft: 8,
+                  borderRadius: 4,
+                }}
+              >
+                <span
+                  style={{
+                    width: 36,
+                    textAlign: "right",
+                    marginRight: 18,
+                    color: isLineHighlighted ? pal.accent : "rgba(255,255,255,0.3)",
+                    userSelect: "none",
+                    flexShrink: 0,
+                    fontSize: fs(21),
+                  }}
+                >
+                  {lineNo}
+                </span>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {tokens.map((t, ti) => {
+                    let col = "#e6edf3";
+                    if (t.type === "keyword") col = "#ff7b72";
+                    else if (t.type === "string") col = "#a5d6ff";
+                    else if (t.type === "number") col = "#79c0ff";
+                    else if (t.type === "comment") col = "#8b949e";
+                    return (
+                      <span key={ti} style={{ color: col, fontStyle: t.type === "comment" ? "italic" : "normal" }}>
+                        {t.text}
+                      </span>
+                    );
+                  })}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Region>
+  );
+}
+
+function CuriosityPeek({ pal, index, total }) {
+  if (index >= total - 1) return null;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        right: 0,
+        top: "50%",
+        transform: "translateY(-50%)",
+        width: 14,
+        height: 120,
+        background: pal.accent,
+        borderTopLeftRadius: 8,
+        borderBottomLeftRadius: 8,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 2px 12px rgba(0,0,0,0.25)",
+        zIndex: 10,
+        pointerEvents: "none",
+        opacity: 0.85,
+      }}
+    >
+      <span style={{ color: pal.onAccent, fontSize: 14, fontWeight: 900, transform: "translateX(-1px)" }}>›</span>
+    </div>
+  );
+}
+
 function Items({ s, ctx, mode }) {
   const { st, pal } = ctx;
   const items = (s.items || []).slice(0, mode === "checklist" ? 6 : 5);
@@ -1320,6 +1583,7 @@ function Cta({ s, ctx }) {
 export function onPhotoSlide(slide, style) {
   const st = styleOf(style);
   if (!slide?.image?.use) return false;
+  if (slide.layout === "panorama") return true;
   if (slide.layout === "photo") return st.photo === "bleed";
   if (slide.layout === "cover") return st.cover === "bleed" || st.cover === "magazine";
   return false;
@@ -1330,7 +1594,7 @@ export function onPhotoSlide(slide, style) {
 // search has finished without a result.
 export function withoutMissingPhoto(slide) {
   if (!slide?.image?.use || slide.img?.src) return slide;
-  const layout = slide.layout === "photo" || slide.layout === "split" ? "statement" : slide.layout;
+  const layout = slide.layout === "photo" || slide.layout === "split" || slide.layout === "panorama" ? "statement" : slide.layout;
   return { ...slide, layout, image: { ...slide.image, use: false } };
 }
 
@@ -1363,6 +1627,12 @@ export const Slide = forwardRef(function Slide({ slide: given, index, total, dir
       break;
     case "split":
       body = <PhotoLayout s={slide} ctx={ctx} split />;
+      break;
+    case "panorama":
+      body = <PanoramaLayout s={slide} ctx={ctx} />;
+      break;
+    case "code":
+      body = <CodeSlide s={slide} ctx={ctx} />;
       break;
     case "list":
       body = <ListSlide s={slide} ctx={ctx} mode="list" />;
@@ -1407,6 +1677,7 @@ export const Slide = forwardRef(function Slide({ slide: given, index, total, dir
       <Background st={st} pal={pal} W={W} H={H} index={index} total={total} />
       {!onPhoto && <Continuity kind={direction?.continuity} pal={pal} W={W} H={H} index={index} total={total} />}
       {body}
+      {slide.peekNext && <CuriosityPeek pal={pal} index={index} total={total} />}
       <Chrome st={st} pal={pal} index={index} total={total} brand={brand} onPhoto={onPhoto} W={W} H={H} isCover={slide.layout === "cover"} />
     </div>
   );

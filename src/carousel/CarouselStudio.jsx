@@ -9,6 +9,7 @@ import { AnimatePresence, Reorder, motion } from "framer-motion";
 import {
   AlertCircle,
   ArrowLeft,
+  Bookmark,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -20,6 +21,7 @@ import {
   FileArchive,
   FileText,
   ImageIcon,
+  LayoutGrid,
   LoaderCircle,
   Plus,
   Redo2,
@@ -29,7 +31,9 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  Video,
   X,
+  Zap,
 } from "lucide-react";
 import { useProject, useStore } from "../store";
 import { Button, Dialog, IconButton, Segmented, Switch, cx, useMedia } from "../ui";
@@ -48,14 +52,17 @@ import {
   creditsOf,
   emptySlide,
   exportWarnings,
+  loadBrandKit,
   mergeRefined,
   needsImage,
+  saveBrandKit,
   settleLayouts,
   withSlide,
   withVariant,
 } from "./model";
 import { buildVariant, findImages, isRunning, refineSlides, resumeVariant } from "./engine";
 import { PhotoPicker } from "./PhotoPicker";
+import { carouselToCanvasProject } from "./bridge";
 
 const TREATMENTS = [
   ["natural", "Natural"],
@@ -187,7 +194,88 @@ function PhotoPanel({ slide, onEdit, onPhoto, onRetry, searching }) {
   );
 }
 
-function SlideInspector({ slide, index, onEdit, onPhoto, onRetry, searching }) {
+function HookLabModal({ topic, currentTitle, onApply, onClose }) {
+  const t = topic || currentTitle || "Your Topic";
+  const cleanTopic = t.replace(/^Why\s+/i, "").replace(/^How\s+to\s+/i, "").replace(/[?.!]+$/, "");
+
+  const hooks = [
+    {
+      id: "contrarian",
+      badge: "Contrarian / Unpopular Truth",
+      icon: "🎯",
+      kicker: "Unpopular truth",
+      title: `Stop doing ${cleanTopic.slice(0, 35)} the traditional way.`,
+      why: "Creates an immediate controversy frame that stops people mid-scroll.",
+    },
+    {
+      id: "curiosity",
+      badge: "Curiosity Gap",
+      icon: "🔍",
+      kicker: "The hidden truth",
+      title: `The 1 pattern behind ${cleanTopic.slice(0, 38)} that changes everything.`,
+      why: "Triggers psychological curiosity; users swipe to close the information gap.",
+    },
+    {
+      id: "datashock",
+      badge: "Data & Stat Shock",
+      icon: "📊",
+      kicker: "By the numbers",
+      title: `90% of people get ${cleanTopic.slice(0, 38)} completely wrong.`,
+      why: "High perceived value and authority; prompts readers to verify where they stand.",
+    },
+    {
+      id: "architecture",
+      badge: "Engineering Deep Dive",
+      icon: "⚡",
+      kicker: "Under the hood",
+      title: `Inside ${cleanTopic.slice(0, 38)}: What really happens behind the scenes.`,
+      why: "Appeals to developers and technical builders who want depth over fluff.",
+    },
+    {
+      id: "blueprint",
+      badge: "The Complete Blueprint",
+      icon: "🚀",
+      kicker: "Step-by-step",
+      title: `The complete blueprint to master ${cleanTopic.slice(0, 35)} from zero.`,
+      why: "Action-oriented and promise-driven; high save and bookmark rates.",
+    },
+  ];
+
+  return (
+    <Dialog title="Viral Hook Lab" description="Test 5 high-converting opening hooks to maximize swipe rate" onClose={onClose}>
+      <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+        {hooks.map((h) => (
+          <div key={h.id} className="rounded-2xl border border-line bg-surface p-4 hover:border-ink transition-colors flex flex-col justify-between gap-3">
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-accent">
+                  <span>{h.icon}</span> {h.badge}
+                </span>
+                <span className="text-[11px] uppercase tracking-wider font-mono text-mute">{h.kicker}</span>
+              </div>
+              <h4 className="text-[15px] font-bold leading-snug text-ink">{h.title}</h4>
+              <p className="mt-1 text-xs text-mute leading-relaxed">{h.why}</p>
+            </div>
+            <div className="flex justify-end pt-1">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  onApply({ kicker: h.kicker, title: h.title });
+                  onClose();
+                }}
+              >
+                Apply Hook
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Dialog>
+  );
+}
+
+function SlideInspector({ slide, index, onEdit, onPhoto, onRetry, searching, onOpenHookLab, onDupSpread }) {
   const set = (patch, key) => onEdit((s) => ({ ...s, ...patch }), key);
   const items = slide.items || [];
   const setItem = (i, patch) => set({ items: items.map((it, k) => (k === i ? { ...it, ...patch } : it)) }, `items-${i}`);
@@ -215,7 +303,93 @@ function SlideInspector({ slide, index, onEdit, onPhoto, onRetry, searching }) {
           <Label hint={`${slide.title.length}/90`}>Headline</Label>
           <textarea value={slide.title} onChange={(e) => set({ title: e.target.value.slice(0, 90) }, "title")} rows={2} className={area} aria-label="Headline" />
           <input value={slide.highlight} onChange={(e) => set({ highlight: e.target.value.slice(0, 40) }, "highlight")} className={cx(line, "mt-2 text-[13px]")} placeholder="Words to highlight (copied from the headline)" aria-label="Highlighted words" />
+          {index === 0 && onOpenHookLab && (
+            <div className="mt-2.5">
+              <Button variant="secondary" size="sm" icon={Zap} onClick={onOpenHookLab} className="w-full justify-center">
+                Viral Hook Lab (Test 5 Angles)
+              </Button>
+            </div>
+          )}
         </div>
+        {slide.layout === "panorama" && (
+          <div className="space-y-2.5 rounded-xl border border-line bg-sunken/40 p-3">
+            <div className="flex items-center justify-between">
+              <Label>Spread Part</Label>
+              <div className="inline-flex rounded-lg border border-line bg-surface p-0.5 text-xs">
+                <button
+                  type="button"
+                  className={cx("px-2.5 py-1 rounded font-medium", (!slide.panorama?.part || slide.panorama.part === 1) ? "bg-ink text-white" : "text-ink-2")}
+                  onClick={() => set({ panorama: { ...slide.panorama, part: 1 } }, "pano-part")}
+                >
+                  Part 1 (Left)
+                </button>
+                <button
+                  type="button"
+                  className={cx("px-2.5 py-1 rounded font-medium", slide.panorama?.part === 2 ? "bg-ink text-white" : "text-ink-2")}
+                  onClick={() => set({ panorama: { ...slide.panorama, part: 2 } }, "pano-part")}
+                >
+                  Part 2 (Right)
+                </button>
+              </div>
+            </div>
+            {onDupSpread && (
+              <Button variant="ghost" size="sm" icon={Plus} onClick={onDupSpread} className="w-full justify-center text-xs">
+                Split image to next slide
+              </Button>
+            )}
+          </div>
+        )}
+        {slide.layout === "code" && (
+          <div className="space-y-3 rounded-xl border border-line bg-sunken/40 p-3">
+            <div className="grid grid-cols-[1fr_120px] gap-2">
+              <div>
+                <Label>Filename</Label>
+                <input
+                  value={slide.code?.filename || ""}
+                  onChange={(e) => set({ code: { ...(slide.code || {}), filename: e.target.value.slice(0, 32) } }, "code-fn")}
+                  className={line}
+                  placeholder="e.g. index.ts or bash"
+                />
+              </div>
+              <div>
+                <Label>Language</Label>
+                <select
+                  value={slide.code?.language || "typescript"}
+                  onChange={(e) => set({ code: { ...(slide.code || {}), language: e.target.value } }, "code-lang")}
+                  className={line}
+                >
+                  <option value="typescript">TypeScript</option>
+                  <option value="javascript">JavaScript</option>
+                  <option value="python">Python</option>
+                  <option value="bash">Bash / Shell</option>
+                  <option value="rust">Rust</option>
+                  <option value="go">Go</option>
+                  <option value="sql">SQL</option>
+                  <option value="json">JSON</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <Label>Code snippet</Label>
+              <textarea
+                value={slide.code?.code || ""}
+                onChange={(e) => set({ code: { ...(slide.code || {}), code: e.target.value } }, "code-snippet")}
+                rows={5}
+                className={cx(area, "font-mono text-xs leading-relaxed")}
+                placeholder="// Paste code snippet or terminal commands here..."
+              />
+            </div>
+            <div>
+              <Label hint="e.g. 2, 4">Highlight lines</Label>
+              <input
+                value={slide.code?.lineHighlight || ""}
+                onChange={(e) => set({ code: { ...(slide.code || {}), lineHighlight: e.target.value } }, "code-highlight")}
+                className={line}
+                placeholder="Lines to highlight, e.g. 2 or 2,3"
+              />
+            </div>
+          </div>
+        )}
         {slide.layout === "stat" && (
           <div className="grid grid-cols-[110px_1fr] gap-2">
             <div>
@@ -262,6 +436,13 @@ function SlideInspector({ slide, index, onEdit, onPhoto, onRetry, searching }) {
           <Label>Source</Label>
           <input value={slide.source} onChange={(e) => set({ source: e.target.value.slice(0, 80) }, "source")} className={line} placeholder="For numbers and quotes, e.g. Pew Research, 2024" />
         </div>
+        <div className="flex items-center justify-between py-1 border-t border-line-soft mt-3 pt-3">
+          <div>
+            <div className="text-xs font-medium text-ink">Curiosity peek</div>
+            <div className="text-[11px] text-mute">Swipe incentive cue on right edge</div>
+          </div>
+          <Switch checked={!!slide.peekNext} onChange={(checked) => set({ peekNext: checked }, "peekNext")} />
+        </div>
       </Section>
       <Section title="Photo">
         <PhotoPanel slide={slide} onEdit={onEdit} onPhoto={onPhoto} onRetry={onRetry} searching={searching} />
@@ -297,7 +478,7 @@ const ThemeThumb = memo(function ThemeThumb({ id, on, cover, total, direction, b
   );
 });
 
-function DesignInspector({ project, variant, onEditVariant, onEditCarousel }) {
+function DesignInspector({ project, variant, onEditVariant, onEditCarousel, onToast }) {
   const d = variant.direction;
   const pal = safePalette(d.palette, d.style);
   const c = project.carousel;
@@ -385,6 +566,36 @@ function DesignInspector({ project, variant, onEditVariant, onEditCarousel }) {
             <input value={c.brand?.name || ""} onChange={(e) => onEditCarousel((cc) => ({ ...cc, brand: { ...cc.brand, name: e.target.value.slice(0, 40) } }), "brand-name")} className={line} placeholder="Brand" />
           </div>
         </div>
+        <div className="mt-3 flex flex-wrap gap-2 pt-2 border-t border-line-soft">
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={Bookmark}
+            onClick={() => {
+              saveBrandKit({ brand: c.brand, style: d.style, palette: d.palette });
+              if (onToast) onToast("Brand kit saved as default!");
+            }}
+          >
+            Save Brand Kit
+          </Button>
+          {loadBrandKit() && (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={Sparkles}
+              onClick={() => {
+                const kit = loadBrandKit();
+                if (kit) {
+                  if (kit.brand) onEditCarousel((cc) => ({ ...cc, brand: kit.brand }));
+                  if (kit.style) setDir({ style: kit.style, ...(kit.palette ? { palette: kit.palette } : {}) });
+                  if (onToast) onToast("Brand kit applied!");
+                }
+              }}
+            >
+              Apply My Brand Kit
+            </Button>
+          )}
+        </div>
       </Section>
     </>
   );
@@ -467,10 +678,11 @@ function ExportDialog({ project, variant, index, onClose }) {
     setBusy(kind);
     setError("");
     try {
-      const { exportZip, exportPdf, slidePng, fileBase } = await import("./exporter");
+      const { exportZip, exportPdf, exportVideo, slidePng, fileBase } = await import("./exporter");
       const base = fileBase(project, variant);
       const onProgress = (done, total) => setProgress({ done, total });
       if (kind === "zip") download(await exportZip({ project, variant, onProgress }), `${base}.zip`);
+      if (kind === "video") download(await exportVideo({ project, variant, onProgress }), `${base}.mp4`);
       if (kind === "pdf") download(await exportPdf({ project, variant, onProgress }), `${base}.pdf`);
       if (kind === "png") download(await slidePng({ project, variant, index }), `${base}-slide-${String(index + 1).padStart(2, "0")}.png`);
     } catch (err) {
@@ -484,6 +696,7 @@ function ExportDialog({ project, variant, index, onClose }) {
   const fmt = FORMATS[project.carousel.format];
   const options = [
     { id: "zip", icon: FileArchive, title: "Instagram carousel", text: `${variant.slides.length} PNGs at ${fmt.w} × ${fmt.h}, plus caption, alt text and photo credits, in a ZIP` },
+    { id: "video", icon: Video, title: "Video Reel (MP4 / WebM)", text: `Auto-advancing 30fps video reel with smooth transitions for Reels & TikTok` },
     { id: "pdf", icon: FileText, title: "LinkedIn document", text: "One PDF; LinkedIn shows it as a swipeable carousel" },
     { id: "png", icon: ImageIcon, title: "This slide only", text: `Slide ${index + 1} as a PNG` },
   ];
@@ -625,7 +838,7 @@ function SlideStrip({ project, variant, index, setIndex, steps, vertical, onReor
             )}
           </button>
           <span className={cx("pointer-events-none absolute font-mono text-[10px] text-mute", vertical ? "-left-5 top-1" : "-bottom-0.5 left-1")}>{i + 1}</span>
-          <span className="absolute -right-1.5 -top-1.5 hidden gap-0.5 group-focus-within:flex group-hover:flex">
+          <span className={cx("absolute -right-1.5 -top-1.5 gap-0.5", i === index ? "flex sm:hidden group-focus-within:flex group-hover:flex" : "hidden group-focus-within:flex group-hover:flex")}>
             <button onClick={() => onDup(i)} aria-label={`Duplicate slide ${i + 1}`} className="flex h-6 w-6 items-center justify-center rounded-full bg-surface shadow ring-1 ring-black/10 hover:bg-wash">
               <Copy size={11} />
             </button>
@@ -655,6 +868,7 @@ export function CarouselStudio() {
   const [picker, setPicker] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [phone, setPhone] = useState(false);
+  const [hookLab, setHookLab] = useState(false);
   const [ask, setAsk] = useState("");
   const [scope, setScope] = useState("slide");
   const [asking, setAsking] = useState(false);
@@ -740,6 +954,23 @@ export function CarouselStudio() {
     if (slides.length >= MAX_SLIDES) return api.toast(`Instagram allows ${MAX_SLIDES} slides at most`, { tone: "error" });
     editVariant((v) => ({ ...v, slides: settleLayouts([...v.slides.slice(0, i + 1), { ...v.slides[i], id: uid() }, ...v.slides.slice(i + 1)]) }));
     setIndex(i + 1);
+  };
+  const dupSpread = (i) => {
+    if (slides.length >= MAX_SLIDES) return api.toast(`Instagram allows ${MAX_SLIDES} slides at most`, { tone: "error" });
+    const s1 = { ...slides[i], layout: "panorama", panorama: { part: 1, totalParts: 2 } };
+    const s2 = { ...slides[i], id: uid(), layout: "panorama", panorama: { part: 2, totalParts: 2 }, kicker: "Part 2", title: "Spread continues" };
+    editVariant((v) => ({ ...v, slides: settleLayouts([...v.slides.slice(0, i), s1, s2, ...v.slides.slice(i + 1)]) }));
+    setIndex(i + 1);
+    api.toast("Created 2-slide panorama spread!", { tone: "success" });
+  };
+  const openInCanvas = () => {
+    try {
+      const canvasProj = carouselToCanvasProject(project, variant);
+      api.add(canvasProj);
+      api.toast("Opened in Canvas! Each slide is an editable artboard.", { tone: "success" });
+    } catch (err) {
+      api.toast("Couldn't open in canvas: " + err.message, { tone: "error" });
+    }
   };
   const delSlide = (i) => {
     if (slides.length <= 2) return api.toast("A carousel needs at least 2 slides", { tone: "error" });
@@ -889,10 +1120,20 @@ export function CarouselStudio() {
         <Segmented id="inspector-tab" full size="sm" value={tab} onChange={setTab} options={[{ value: "slide", label: "Slide" }, { value: "design", label: "Design" }, { value: "caption", label: "Caption" }]} />
       </div>
       {tab === "slide" && slide && (
-        <SlideInspector key={slide.id} slide={slide} index={index} onEdit={editSlide} onPhoto={() => setPicker(true)} onRetry={() => retryPhotos([index])} searching={searching(slide) || imagesBusy} />
+        <SlideInspector
+          key={slide.id}
+          slide={slide}
+          index={index}
+          onEdit={editSlide}
+          onPhoto={() => setPicker(true)}
+          onRetry={() => retryPhotos([index])}
+          searching={searching(slide) || imagesBusy}
+          onOpenHookLab={() => setHookLab(true)}
+          onDupSpread={() => dupSpread(index)}
+        />
       )}
       {tab === "slide" && !slide && <p className="p-5 text-sm text-mute">Slides appear here as Pip writes them.</p>}
-      {tab === "design" && <DesignInspector project={project} variant={variant} onEditVariant={editVariant} onEditCarousel={editCarousel} />}
+      {tab === "design" && <DesignInspector project={project} variant={variant} onEditVariant={editVariant} onEditCarousel={editCarousel} onToast={(msg) => api.toast(msg, { tone: "success" })} />}
       {tab === "caption" && <CaptionInspector variant={variant} onEditVariant={editVariant} />}
     </>
   );
@@ -920,6 +1161,9 @@ export function CarouselStudio() {
             <IconButton icon={Undo2} label="Undo" disabled={!hist?.past.length} onClick={() => api.undo(project.id)} />
             <IconButton icon={Redo2} label="Redo" disabled={!hist?.future.length} onClick={() => api.redo(project.id)} />
           </span>
+          <Button variant="secondary" size="sm" icon={LayoutGrid} onClick={openInCanvas} disabled={!slides.length} aria-label="Open in Canvas">
+            <span className="hidden md:inline">Open in Canvas</span>
+          </Button>
           <Button variant="secondary" size="sm" icon={Smartphone} onClick={() => setPhone(true)} disabled={!slides.length} aria-label="Feed preview">
             <span className="hidden sm:inline">Preview</span>
           </Button>
@@ -1074,10 +1318,20 @@ export function CarouselStudio() {
                   <div className="sb min-h-0 flex-1 overflow-y-auto px-1 pb-6">
                     <div className="mx-auto max-w-2xl">
                       {tab === "slide" && slide && (
-                        <SlideInspector key={slide.id} slide={slide} index={index} onEdit={editSlide} onPhoto={() => setPicker(true)} onRetry={() => retryPhotos([index])} searching={searching(slide) || imagesBusy} />
+                        <SlideInspector
+                          key={slide.id}
+                          slide={slide}
+                          index={index}
+                          onEdit={editSlide}
+                          onPhoto={() => setPicker(true)}
+                          onRetry={() => retryPhotos([index])}
+                          searching={searching(slide) || imagesBusy}
+                          onOpenHookLab={() => setHookLab(true)}
+                          onDupSpread={() => dupSpread(index)}
+                        />
                       )}
                       {tab === "slide" && !slide && <p className="p-5 text-sm text-mute">Slides appear here as Pip writes them.</p>}
-                      {tab === "design" && <DesignInspector project={project} variant={variant} onEditVariant={editVariant} onEditCarousel={editCarousel} />}
+                      {tab === "design" && <DesignInspector project={project} variant={variant} onEditVariant={editVariant} onEditCarousel={editCarousel} onToast={(msg) => api.toast(msg, { tone: "success" })} />}
                       {tab === "caption" && <CaptionInspector variant={variant} onEditVariant={editVariant} />}
                     </div>
                   </div>
@@ -1100,6 +1354,18 @@ export function CarouselStudio() {
               const id = slide.id;
               editProject((p) => withSlide(p, variant.id, id, (sl) => ({ ...sl, img, image: { ...sl.image, use: true, status: "ok" } })));
             }}
+          />
+        )}
+        {hookLab && (
+          <HookLabModal
+            key="hook-lab"
+            topic={c.topic}
+            currentTitle={slide?.title}
+            onApply={({ kicker, title }) => {
+              editSlide((s) => ({ ...s, kicker, title }));
+              api.toast("Applied viral hook to cover!", { tone: "success" });
+            }}
+            onClose={() => setHookLab(false)}
           />
         )}
         {exporting && <ExportDialog key="export" project={project} variant={variant} index={index} onClose={() => setExporting(false)} />}
